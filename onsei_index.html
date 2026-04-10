@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>音声学習</title>
+  <style>
+    body { font-family: sans-serif; background: #eaf9f7; padding: 20px; max-width: 480px; margin: 0 auto; }
+    h2 { color: #009e96; margin-bottom: 12px; }
+    .btn-row { display: flex; gap: 10px; margin: 12px 0; }
+    button { flex: 1; padding: 14px; border-radius: 10px; border: 1px solid #009e96; background: #fff; color: #009e96; font-size: 16px; cursor: pointer; }
+    button:active { background: #d4f2ee; }
+    select { padding: 8px; border-radius: 8px; border: 1px solid #a8ddd8; font-size: 14px; }
+    #status { margin-top: 16px; padding: 12px; background: #fff; border-radius: 10px; border: 1px solid #a8ddd8; color: #4a2000; font-size: 14px; line-height: 1.7; min-height: 60px; }
+    #progress { margin-top: 8px; font-size: 12px; color: #6a9e9a; }
+    .rate-row { display: flex; gap: 10px; margin-top: 12px; }
+    .rate-row button { font-size: 20px; padding: 16px; }
+    .good { border-color: #d4721a; color: #d4721a; }
+    .bad  { border-color: #a08060; color: #a08060; }
+  </style>
+</head>
+<body>
+  <h2>⚖ 音声学習</h2>
+
+  <div class="btn-row">
+    <button onclick="start()">▶ 再生</button>
+    <button onclick="stop()">■ 停止</button>
+    <button onclick="skip()">⏭ スキップ</button>
+  </div>
+
+  <select onchange="changeRate(this.value)">
+    <option value="0.8">0.8x</option>
+    <option value="1" selected>1.0x</option>
+    <option value="1.2">1.2x</option>
+    <option value="1.5">1.5x</option>
+  </select>
+
+  <div id="status">再生ボタンを押してちゃむ🌸</div>
+  <div id="progress"></div>
+
+  <div class="rate-row">
+    <button class="good" onclick="rate('good')">🌸 わかった</button>
+    <button class="bad"  onclick="rate('bad')">💩 もう一度</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
