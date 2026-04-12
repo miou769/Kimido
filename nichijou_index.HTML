@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>日常民法道場：完全版</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: sans-serif; background: #fdf4ee; display: flex; justify-content: center; padding: 20px; }
+    #root { width: 100%; max-width: 500px; }
+    .card { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 2px solid #f8d7da; text-align: center; }
+    .field { font-size: 12px; color: #d63384; font-weight: bold; margin-bottom: 5px; text-align: left; }
+    .question { font-size: 18px; line-height: 1.6; color: #4a2000; margin-bottom: 20px; min-height: 100px; text-align: left; }
+    .btn-row { display: flex; gap: 10px; margin-bottom: 15px; }
+    button { flex: 1; padding: 15px; border-radius: 12px; border: 2px solid #009e96; background: white; color: #009e96; font-size: 18px; cursor: pointer; transition: 0.2s; font-weight: bold; }
+    button:hover { background: #e6f7f6; }
+    button.correct { background: #009e96; color: white; width: 100%; }
+    .feedback { margin-top: 15px; padding: 15px; background: #fff5f8; border-radius: 10px; color: #c2185b; font-size: 15px; line-height: 1.5; border-left: 5px solid #ff85a2; text-align: left; }
+    .progress { text-align: center; font-size: 12px; color: #999; margin-top: 15px; }
+    .start-btn { padding: 20px; font-size: 20px; background: #d63384; color: white; border: none; border-radius: 15px; width: 100%; box-shadow: 0 4px 10px rgba(214, 51, 132, 0.3); }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const QUESTIONS = [
+      { id: 1, field: "債権", q: "特定の日時に届かなければ目的を達せない契約（定期行為）で履行が遅れた場合、催告なしで直ちに解除できる。", a: "○", fb: "正解！25日のケーキは26日じゃゴミ。民法542条の即解除ちゃむ！" },
+      { id: 2, field: "債権", q: "遅滞が個人的事情でも、過失がないと証明されない限り、債務者は賠償責任を免れない。", a: "○", fb: "正解！準備不足は典型的な過失。証明できないなら責任取るのが筋ちゃむ（415条）。" },
+      { id: 3, field: "総則", q: "意思能力を一時的に欠いていた者が行った法律行為は、無効となる。", a: "○", fb: "正解！一時的なオーバーヒートもバグ（無効）扱い。法は弱い頭脳を守るちゃむ（3条の2）。" },
+      { id: 4, field: "学習", q: "体系的理解より、早い段階から過去問に触れる方が効率的である。", a: "○", fb: "正解！完璧主義は不合格への道。不完全なまま回す勇気が勝利を呼ぶちゃむ！" },
+      { id: 5, field: "債権", q: "無償の委任であっても、受任者は善管注意義務を負う。", a: "○", fb: "正解！タダでも手抜きは許さない。プロとして引き受けた以上、義務は重いちゃむ（644条）。" },
+      { id: 6, field: "事務管理", q: "義務なく他人のために行った清掃等が本人の利益に適うなら、費用の償還を請求できる。", a: "○", fb: "正解！他人のバグを直してあげたなら、そのコストは請求していいちゃむ（702条）。" },
+      { id: 7, field: "相続", q: "相続放棄した者も、次の管理者が現れるまでは管理を継続する義務がある。", a: "○", fb: "正解！「もう関係ない」は通用しない。バトンタッチするまでが責任ちゃむ（940条）。" },
+      { id: 8, field: "債権", q: "使用者は労働者が安全に働けるよう配慮する義務（安全配慮義務）を負う。", a: "○", fb: "正解！給料払えば何させてもいいなんて茶番は、民法が許さないちゃむ！" },
+      { id: 9, field: "不法行為", q: "LINEによる執拗な誹謗中傷は、精神的平穏を害するものとして不法行為を構成し得る。", a: "○", fb: "正解！LINEは刃物。他人の心を削る行為は、立派な権利侵害（709条）ちゃむ！" },
+      { id: 10, field: "総則", q: "信義則や権利濫用の禁止は、具体的な条文がない時の『切り札』として機能する。", a: "○", fb: "正解！民法1条の魂。ブラックな現場を裁く最後の審判はこの条文ちゃむ！" },
+      { id: 11, field: "総則", q: "公序良俗に反する法律行為は、当事者が合意していても無効となる。", a: "○", fb: "正解！どんな合意も社会のルールには勝てないちゃむ（民法90条）。" },
+      { id: 12, field: "債権", q: "書面によらない贈与は、履行が終わった部分については解除することができない。", a: "○", fb: "正解！受け取ってしまったら返せとは言えないちゃむ（民法550条）。" },
+      { id: 13, field: "不法行為", q: "不法行為による損害賠償には、財産的損害だけでなく精神的苦痛（慰謝料）も含まれる。", a: "○", fb: "正解！心の傷も民法710条がしっかり補填してくれるちゃむ！" },
+      { id: 14, field: "物権", q: "共有スペースを独占するために私物を大量に置く行為は、共有物の変更に当たり全員の同意が必要。", a: "○", fb: "正解！共有物の変更は全員一致ちゃむ（民法251条）。勝手な私物化は違法だちゃむ！" },
+      { id: 15, field: "総則", q: "相手の立場によって態度を変える行為は、信義誠実の原則（信義則）に反する。", a: "○", fb: "正解！民法1条2項の信義則ちゃむ。一貫性のない対応は法の精神に反するちゃむ！" }
+    ];
+
+    function App() {
+      const [isStarted, setIsStarted] = useState(false);
+      const [idx, setIdx] = useState(0);
+      const [showFb, setShowFb] = useState(false);
+      const [isCorrect, setIsCorrect] = useState(null);
+
+      const current = QUESTIONS[idx];
+
+      const speak = (text) => {
+        window.speechSynthesis.cancel();
+        const uttr = new SpeechSynthesisUtterance(text);
+        uttr.lang = "ja-JP";
+        uttr.rate = 1.1;
+        window.speechSynthesis.speak(uttr);
+      };
+
+      useEffect(() => {
+        if (isStarted && !showFb) speak(current.q);
+      }, [idx, showFb, isStarted]);
+
+      const handleStart = () => {
+        setIsStarted(true);
+        const unlock = new SpeechSynthesisUtterance("");
+        window.speechSynthesis.speak(unlock);
+      };
+
+      const handleAnswer = (choice) => {
+        const correct = choice === current.a;
+        setIsCorrect(correct);
+        setShowFb(true);
+        speak(correct ? current.fb : "不正解ちゃむ。条文を読み直して出直すちゃむ！");
+      };
+
+      const next = () => {
+        setShowFb(false);
+        setIsCorrect(null);
+        setIdx((idx + 1) % QUESTIONS.length);
+      };
+
+      if (!isStarted) {
+        return (
+          <div className="card">
+            <h2 style={{color: "#d63384", marginBottom: "20px"}}>🌸 日常民法道場 🌸</h2>
+            <p style={{marginBottom: "30px", color: "#666"}}>音声が流れるから注意するちゃむ！</p>
+            <button className="start-btn" onClick={handleStart}>学習を開始する</button>
+          </div>
+        );
+      }
+
+      return (
+        <div className="card">
+          <div className="field">【{current.field}】</div>
+          <div className="question">{current.q}</div>
+          {!showFb ? (
+            <div className="btn-row">
+              <button onClick={() => handleAnswer("○")}>○</button>
+              <button onClick={() => handleAnswer("×")}>×</button>
+            </div>
+          ) : (
+            <div>
+              <div className="feedback">{current.fb}</div>
+              <button className="correct" onClick={next} style={{marginTop:"12px"}}>次へ進むちゃむ ⏭</button>
+            </div>
+          )}
+          <div className="progress">{idx + 1} / {QUESTIONS.length} 問</div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
