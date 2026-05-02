@@ -278,3 +278,39 @@
                                             
                                             {aiContent ? (
                                                 <div className="anima
+
+{aiContent ? (
+                                                <div className="animate-in fade-in duration-700 pb-12">
+                                                    <p className="text-[14px] leading-loose whitespace-pre-wrap font-sans text-slate-200">{aiContent}</p>
+                                                </div>
+                                            ) : (
+                                                <div className="h-full flex flex-col items-center justify-center opacity-10">
+                                                    <i data-lucide="brain-circuit" className="w-14 h-14 text-white mb-4"></i>
+                                                    <p className="text-[11px] text-white tracking-widest text-center uppercase font-black px-10">Select an analysis thread to deploy logic logs</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            <div className="flex-1 flex flex-col items-center justify-center space-y-8 text-center">
+                                <div className="bg-orange-200 w-32 h-32 rounded-full flex items-center justify-center shadow-2xl animate-pulse">
+                                    <i data-lucide="headphones" className="w-14 h-14 text-orange-600"></i>
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-base font-black text-slate-700">耳勉モード作動中ちゃむ</p>
+                                    <p className="text-xs text-slate-500 px-8">{currentQ?.q || "問題を準備中ちゃむ..."}</p>
+                                </div>
+                                <button onClick={()=>{window.speechSynthesis.cancel(); setAppState('setup');}} className="px-8 py-3 bg-white border border-orange-200 text-orange-600 rounded-2xl font-black text-sm shadow-lg active:scale-95">停止して戻る</button>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
