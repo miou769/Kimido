@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>きみまろ道場 v30.0</title>
+    <title>きみまろ道場 v31.0 - Tiffany Edition</title>
     <!-- 外部ライブラリ -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
@@ -18,9 +18,40 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
         .glass-dark { background: rgba(15, 23, 42, 0.98); backdrop-filter: blur(15px); }
+
+        /* === 🌸 ティファニーブルー・パレット === */
+        :root {
+            --tiffany-bg: #eaf9f7;        /* 背景 */
+            --tiffany-main: #009e96;      /* メインアクセント */
+            --tiffany-light: #3db8b3;     /* 解説・薄ティファニー */
+            --tiffany-soft: #d8f1ee;      /* やさしい背景 */
+            --tiffany-deep: #00756f;      /* 濃いめ */
+            --warm-brown: #a08060;        /* 問題文・薄茶 */
+            --warm-bg: #fdf8f3;           /* 暖色背景 */
+            --pink-blossom: #ffe4ef;      /* ピンク背景 */
+            --pink-deep: #d97a9a;         /* ピンク濃 */
+        }
+        .bg-tiffany-bg { background-color: var(--tiffany-bg); }
+        .bg-tiffany-main { background-color: var(--tiffany-main); }
+        .bg-tiffany-light { background-color: var(--tiffany-light); }
+        .bg-tiffany-soft { background-color: var(--tiffany-soft); }
+        .bg-tiffany-deep { background-color: var(--tiffany-deep); }
+        .bg-warm-bg { background-color: var(--warm-bg); }
+        .bg-pink-blossom { background-color: var(--pink-blossom); }
+        .text-tiffany-main { color: var(--tiffany-main); }
+        .text-tiffany-light { color: var(--tiffany-light); }
+        .text-tiffany-deep { color: var(--tiffany-deep); }
+        .text-warm-brown { color: var(--warm-brown); }
+        .text-pink-deep { color: var(--pink-deep); }
+        .border-tiffany-main { border-color: var(--tiffany-main); }
+        .border-tiffany-light { border-color: var(--tiffany-light); }
+        .border-tiffany-soft { border-color: var(--tiffany-soft); }
+
+        /* 🌸ボタンの細枠 1px */
+        .btn-thin { border-width: 1px; }
     </style>
 </head>
-<body class="bg-[#f8faf8]">
+<body class="bg-tiffany-bg">
     <div id="root"></div>
 
     <script type="text/babel">
@@ -30,8 +61,10 @@
         // 🛠️ 【APIキー設定エリア】
         // 司令官、もしGoogleからキーを貰ったら、下の "" の中に入れてくだちゃい。
         // キーがなくても、基本の問題演習はバッチリ動くちゃむ！
+        // ⚠️注意：このファイルをGitHubに公開する場合、APIキーは入れないでちゃむ！
+        // 公開リポジトリだと世界中に見えてしまうちゃむ。
         // ============================================================
-        const apiKey = ""; 
+        const apiKey = "";
         // ============================================================
 
         const AUTO_NEXT_DELAY = 12000;
@@ -39,11 +72,18 @@
 
         // 🧪 データ救出エンジン (不完全なJSONを1問ずつ拾い出すちゃむ)
         const rescueData = (text) => {
+            // まず正規のJSONとしてパース試行（健全なJSONならこれで通る）
+            try {
+                const parsed = JSON.parse(text);
+                if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+            } catch (e) { /* fall through */ }
+
+            // 救出モード（壊れたJSONからでも1問ずつ拾い出す）
             let s = text.trim();
-            s = s.replace(/[“”„〝〞]/g, '"').replace(/[，]/g, ',').replace(/[：]/g, ':');
+            s = s.replace(/[\u201C\u201D\u201E\u301D\u301E]/g, '"').replace(/[\uFF0C]/g, ',').replace(/[\uFF1A]/g, ':');
             s = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
             const results = [];
-            const regex = /\{[\s\S]*?"q"\s*:\s*"[\s\S]*?"a"\s*:\s*"[\s\S]*?fb_ok"[\s\S]*?\}/g; 
+            const regex = /\{[\s\S]*?"q"\s*:\s*"[\s\S]*?"a"\s*:\s*"[\s\S]*?fb_ok"[\s\S]*?\}/g;
             let match;
             while ((match = regex.exec(s)) !== null) {
                 try {
@@ -56,14 +96,21 @@
             return results;
         };
 
+        // 🌸 文字数連動の表示秒数（calcDelay）
+        const calcDelay = (text) => {
+            const len = (text || "").length;
+            // 1文字あたり約180ms＋ベース3秒、上限12秒
+            return Math.min(Math.max(3000, 3000 + len * 180), 12000);
+        };
+
         function App() {
             const [DATA, setDATA] = useState(null);
             const [bootLog, setBootLog] = useState("システム起動中...");
             const [errorMsg, setErrorMsg] = useState(null);
             const [appState, setAppState] = useState('setup');
-            const [viewMode, setViewMode] = useState('dojo'); 
+            const [viewMode, setViewMode] = useState('dojo');
             const [currentIndex, setCurrentIndex] = useState(0);
-            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v30-mastery') || '{}'));
+            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v31-mastery') || '{}'));
             const [sessionCount, setSessionCount] = useState(0);
             const [targetCount, setTargetCount] = useState(100);
             const [shuffledChoices, setShuffledChoices] = useState([]);
@@ -72,8 +119,10 @@
             const [aiContent, setAiContent] = useState("");
             const [loadingState, setLoadingState] = useState("");
             const [isPaused, setIsPaused] = useState(false);
+            const [autoDelay, setAutoDelay] = useState(AUTO_NEXT_DELAY);
             const autoTimerRef = useRef(null);
 
+            // 🔍 データロード
             useEffect(() => {
                 const init = async () => {
                     try {
@@ -81,65 +130,98 @@
                         const response = await fetch(`./questions.json?v=${Date.now()}`);
                         if (!response.ok) throw new Error("questions.json が見つからないちゃむ！");
                         const raw = await response.text();
-                        setBootLog("破損データを修復して1問ずつ救出中...");
+                        setBootLog("データを解析・救出中ちゃむ...");
                         const savedData = rescueData(raw);
                         if (savedData.length === 0) throw new Error("有効な問題が1問も見つからなかったちゃむ。");
-                        setDATA(savedData.map((q, i) => ({ ...q, id: q.id || i+1, choices: q.choices || ["○", "×"] })));
+                        setDATA(savedData.map((q, i) => ({ ...q, id: q.id || i + 1, choices: q.choices || ["○", "×"] })));
                     } catch (e) { setErrorMsg(e.message); }
                 };
                 init();
             }, []);
 
-            useEffect(() => { if (window.lucide) lucide.createIcons(); });
+            // Lucideアイコン再描画
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+
+            // ページ離脱時に音声停止
+            useEffect(() => {
+                const stop = () => window.speechSynthesis.cancel();
+                window.addEventListener('pagehide', stop);
+                document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+                return () => window.removeEventListener('pagehide', stop);
+            }, []);
 
             const currentQ = useMemo(() => DATA ? (DATA[currentIndex] || DATA[0]) : null, [DATA, currentIndex]);
 
-            const speak = (text, onEnd) => {
+            // 🔊 ×を「バツ」に置換、長文を句読点で分割して順次読み上げ
+            const speak = useCallback((text, onEnd) => {
                 window.speechSynthesis.cancel();
-                const uttr = new SpeechSynthesisUtterance(text);
-                uttr.lang = 'ja-JP';
-                if (onEnd) uttr.onend = onEnd;
-                window.speechSynthesis.speak(uttr);
-            };
-
-            const handleAnswer = (choice) => {
-                if (showFeedback) return;
-                const correct = choice === currentQ.a;
-                setIsCorrect(correct);
-                setShowFeedback(true);
-                setSessionCount(s => s + 1);
-                const r = results[currentQ.id] || { count: 0 };
-                const newRes = { ...results, [currentQ.id]: { count: (r.count || 0) + (correct ? 1 : 0) } };
-                setResults(newRes);
-                localStorage.setItem('kimimaro-v30-mastery', JSON.stringify(newRes));
-                speak(correct ? "正解ちゃむ！" : "残念ちゃむ。");
-                if (!isPaused && viewMode === 'dojo') autoTimerRef.current = setTimeout(pickNext, AUTO_NEXT_DELAY);
-            };
+                if (!text) { if (onEnd) onEnd(); return; }
+                const cleaned = String(text).replace(/×/g, "バツ").replace(/○/g, "マル");
+                const parts = cleaned.split(/(?<=[。、！？\.])/).filter(p => p.trim());
+                let i = 0;
+                const next = () => {
+                    if (i >= parts.length) { if (onEnd) onEnd(); return; }
+                    const u = new SpeechSynthesisUtterance(parts[i]);
+                    u.lang = 'ja-JP';
+                    u.onend = () => { i++; next(); };
+                    window.speechSynthesis.speak(u);
+                };
+                next();
+            }, []);
 
             const pickNext = useCallback(() => {
                 if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+                if (!DATA || DATA.length === 0) return;
                 const idx = Math.floor(Math.random() * DATA.length);
+                const q = DATA[idx];
                 setCurrentIndex(idx);
-                setShuffledChoices([...(DATA[idx].choices || ["○", "×"])].sort(() => Math.random() - 0.5));
+                setShuffledChoices([...(q.choices || ["○", "×"])].sort(() => Math.random() - 0.5));
                 setShowFeedback(false);
                 setIsCorrect(null);
                 setAiContent("");
 
                 if (viewMode === 'ear') {
-                    speak(`問題です。${DATA[idx].q}`, () => {
+                    speak(`問題です。${q.q}`, () => {
                         setTimeout(() => {
-                            speak(`正解は、${DATA[idx].a}。解説、${DATA[idx].fb_ok}`, () => {
+                            speak(`正解は、${q.a}。解説、${q.fb_ok || ''}`, () => {
                                 setTimeout(pickNext, 3000);
                             });
                         }, HANDS_FREE_WAIT);
                     });
                 }
-            }, [DATA, viewMode]);
+            }, [DATA, viewMode, speak]);
+
+            const handleAnswer = (choice) => {
+                if (showFeedback || !currentQ) return;
+                const correct = choice === currentQ.a;
+                setIsCorrect(correct);
+                setShowFeedback(true);
+                setSessionCount(s => s + 1);
+
+                const r = results[currentQ.id] || { count: 0 };
+                const newRes = { ...results, [currentQ.id]: { count: (r.count || 0) + (correct ? 1 : 0) } };
+                setResults(newRes);
+                localStorage.setItem('kimimaro-v31-mastery', JSON.stringify(newRes));
+
+                speak(correct ? "正解ちゃむ！" : "残念ちゃむ。");
+
+                // 文字数連動でディレイ計算
+                const fbText = correct ? currentQ.fb_ok : currentQ.fb_ng;
+                const d = calcDelay(fbText || "");
+                setAutoDelay(d);
+                if (!isPaused && viewMode === 'dojo') {
+                    autoTimerRef.current = setTimeout(pickNext, d);
+                }
+            };
 
             const handleAiCall = async (type) => {
-                if (!apiKey) { setAiContent("【重要】AIボタンを使うには、Google AI Studioで無料発行したAPIキーを、このコードの20行目付近に入れてくだちゃい！"); return; }
+                if (!apiKey) {
+                    setAiContent("【AI機能はオフ中ちゃむ】\n\nAI解析を使うには、Google AI Studioで無料発行したAPIキーをコード冒頭の apiKey に入れてくだちゃい。\n\n⚠️注意：GitHubに公開するなら絶対に入れたままアップしないでちゃむ！");
+                    return;
+                }
                 setLoadingState(type);
                 setIsPaused(true);
+                if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
                 const prompts = {
                     else: "Javaエンジニアの視点でelse（例外・ひっかけ）をデバッグして。",
                     detail: "背景法理を初心者向けに詳しく解説してちゃむ。",
@@ -153,137 +235,205 @@
                         body: JSON.stringify({ contents: [{ parts: [{ text: `問題: ${currentQ.q}\n解答: ${currentQ.a}\n指示: ${prompts[type]}` }] }] })
                     });
                     const d = await res.json();
-                    setAiContent(d.candidates[0].content.parts[0].text);
+                    setAiContent(d.candidates?.[0]?.content?.parts?.[0]?.text || "解析失敗ちゃむ。");
                 } catch (e) { setAiContent("AI通信失敗だちゃむ。キーを確認してくだちゃい。"); }
                 finally { setLoadingState(""); }
             };
 
+            // 🌸 ローディング画面
             if (!DATA && !errorMsg) return (
-                <div className="h-screen bg-slate-900 flex flex-col items-center justify-center text-emerald-400 p-10 text-center">
-                    <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-6"></div>
+                <div className="h-screen bg-tiffany-bg flex flex-col items-center justify-center text-tiffany-deep p-10 text-center">
+                    <div className="w-16 h-16 border-4 border-tiffany-main border-t-transparent rounded-full animate-spin mb-6"></div>
                     <h2 className="text-xl font-black mb-2 tracking-tighter italic">きみまろ道場 起動中...</h2>
-                    <p className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">{bootLog}</p>
+                    <p className="text-[10px] font-mono text-tiffany-light uppercase tracking-widest">{bootLog}</p>
                 </div>
             );
 
+            // ❌ エラー画面
             if (errorMsg) return (
-                <div className="h-screen bg-slate-900 flex flex-col items-center justify-center p-8 text-white text-center">
-                    <div className="bg-red-500 w-16 h-16 rounded-full flex items-center justify-center mb-6"><i data-lucide="alert-octagon" className="w-8 h-8 text-white"></i></div>
-                    <h2 className="text-xl font-black mb-4 italic text-red-400">MISSION ABORTED</h2>
-                    <div className="bg-red-900/30 border border-red-500/50 p-6 rounded-[2rem] text-left mb-8 w-full max-w-md">
-                        <p className="text-[10px] text-red-400 font-black uppercase mb-1">Diagnosis Log</p>
-                        <p className="text-sm text-red-100 font-mono">{errorMsg}</p>
+                <div className="h-screen bg-tiffany-bg flex flex-col items-center justify-center p-8 text-tiffany-deep text-center">
+                    <div className="bg-pink-deep w-16 h-16 rounded-full flex items-center justify-center mb-6">
+                        <i data-lucide="alert-octagon" className="w-8 h-8 text-white"></i>
                     </div>
-                    <button onClick={()=>window.location.reload()} className="px-10 py-4 bg-emerald-600 text-white rounded-2xl font-black shadow-lg">REBOOT SYSTEM</button>
+                    <h2 className="text-xl font-black mb-4 italic text-pink-deep">エラー発生ちゃむ</h2>
+                    <div className="bg-white border border-pink-deep/30 p-6 rounded-[2rem] text-left mb-8 w-full max-w-md shadow-md">
+                        <p className="text-[10px] text-pink-deep font-black uppercase mb-1">Diagnosis Log</p>
+                        <p className="text-sm text-warm-brown font-mono">{errorMsg}</p>
+                    </div>
+                    <button onClick={() => window.location.reload()} className="px-10 py-4 bg-tiffany-main text-white rounded-2xl font-black shadow-lg btn-thin active:scale-95">REBOOT SYSTEM</button>
                 </div>
             );
 
+            // 🏠 セットアップ画面
             if (appState === 'setup') return (
-                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white text-center">
-                    <div className="max-w-md w-full space-y-12 animate-in fade-in duration-700">
+                <div className="min-h-screen bg-tiffany-bg flex items-center justify-center p-6 text-tiffany-deep text-center">
+                    <div className="max-w-md w-full space-y-10 animate-in fade-in duration-700">
                         <div className="space-y-4">
-                            <div className="bg-emerald-500 w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl rotate-3"><i data-lucide="shield-check" className="w-10 h-10 text-white"></i></div>
-                            <h1 className="text-4xl font-black tracking-tighter italic">きみまろ道場</h1>
-                            <div className="inline-block px-4 py-1 bg-emerald-900/40 rounded-full text-[10px] font-black text-emerald-400 border border-emerald-500/20 uppercase tracking-[0.2em]">v30.0 Ultimate Final</div>
-                            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
-                                <p className="text-2xl font-black text-white">{DATA.length}問 救出成功だちゃむ！</p>
+                            <div className="bg-tiffany-main w-20 h-20 rounded-[2rem] flex items-center justify-center mx-auto shadow-2xl rotate-3">
+                                <i data-lucide="shield-check" className="w-10 h-10 text-white"></i>
+                            </div>
+                            <h1 className="text-4xl font-black tracking-tighter italic text-tiffany-deep">きみまろ道場</h1>
+                            <div className="inline-block px-4 py-1 bg-tiffany-soft rounded-full text-[10px] font-black text-tiffany-deep border border-tiffany-main/20 uppercase tracking-[0.2em]">v31.0 Tiffany Edition</div>
+                            <div className="p-4 bg-white border border-tiffany-soft rounded-2xl shadow-sm">
+                                <p className="text-2xl font-black text-tiffany-main">{DATA.length}問 装填完了ちゃむ！</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4 px-4">
                             {[20, 50, 100, 200].map(n => (
                                 <button key={n} onClick={() => { setTargetCount(n); setSessionCount(0); setAppState('dojo'); setViewMode('dojo'); pickNext(); }}
-                                    className="h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-black hover:bg-emerald-600 transition-all active:scale-95 shadow-lg">
+                                    className="h-16 rounded-2xl bg-white btn-thin border-tiffany-main text-xl font-black text-tiffany-deep hover:bg-tiffany-main hover:text-white transition-all active:scale-95 shadow-md">
                                     {n}問
                                 </button>
                             ))}
                         </div>
                         <button onClick={() => { setViewMode('ear'); setAppState('dojo'); setTargetCount(999); pickNext(); }}
-                            className="w-full h-16 rounded-2xl bg-orange-100 hover:bg-orange-200 text-orange-700 text-lg font-bold flex items-center justify-center gap-3 active:scale-95 border-none shadow-xl">
-                            <i data-lucide="headphones" className="w-7 h-7"></i> 耳勉を開始
+                            className="w-full h-16 rounded-2xl bg-pink-blossom hover:bg-pink-200 text-pink-deep text-lg font-bold flex items-center justify-center gap-3 active:scale-95 btn-thin border-pink-deep/20 shadow-md">
+                            <i data-lucide="headphones" className="w-7 h-7"></i> 耳勉モード（自動）
+                        </button>
+                        <button onClick={() => setViewMode('stats') || setAppState('dojo')}
+                            className="w-full h-12 rounded-2xl bg-white text-tiffany-deep text-sm font-bold flex items-center justify-center gap-2 active:scale-95 btn-thin border-tiffany-soft shadow-sm">
+                            <i data-lucide="bar-chart-3" className="w-4 h-4"></i> 成績を見る
                         </button>
                     </div>
                 </div>
             );
 
-            return (
-                <div className="h-screen bg-[#f8faf8] flex flex-col overflow-hidden text-slate-800">
-                    <nav className="bg-white/80 backdrop-blur-md border-b border-emerald-100 flex items-center justify-between px-6 h-16 shrink-0 z-50">
-                        <button onClick={()=>setAppState('setup')} className="text-slate-300 hover:text-emerald-500 transition-transform"><i data-lucide="home" className="w-6 h-6"></i></button>
-                        <div className="flex flex-col items-center">
-                            <span className="text-[10px] font-black text-emerald-600 tracking-widest uppercase italic tracking-tighter">Kimimaro Dojo Active</span>
-                            <span className="text-[9px] font-bold text-slate-400">{sessionCount} / {targetCount}</span>
+            // 📊 統計画面
+            if (viewMode === 'stats') {
+                const masteredCount = Object.values(results).filter(r => (r.count || 0) >= 7).length;
+                const learningCount = Object.values(results).filter(r => (r.count || 0) > 0 && (r.count || 0) < 7).length;
+                const untouchedCount = DATA.length - masteredCount - learningCount;
+                return (
+                    <div className="min-h-screen bg-tiffany-bg p-6 text-tiffany-deep">
+                        <div className="max-w-md mx-auto space-y-6">
+                            <div className="flex items-center justify-between">
+                                <h2 className="text-2xl font-black italic">📊 戦果分析</h2>
+                                <button onClick={() => setAppState('setup')} className="text-tiffany-main">
+                                    <i data-lucide="x" className="w-6 h-6"></i>
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="bg-tiffany-main text-white p-4 rounded-2xl shadow-md">
+                                    <p className="text-[10px] uppercase font-black opacity-80">完全制覇</p>
+                                    <p className="text-3xl font-black">{masteredCount}</p>
+                                </div>
+                                <div className="bg-tiffany-light text-white p-4 rounded-2xl shadow-md">
+                                    <p className="text-[10px] uppercase font-black opacity-80">修行中</p>
+                                    <p className="text-3xl font-black">{learningCount}</p>
+                                </div>
+                                <div className="bg-white text-warm-brown p-4 rounded-2xl shadow-md btn-thin border-tiffany-soft">
+                                    <p className="text-[10px] uppercase font-black">未着手</p>
+                                    <p className="text-3xl font-black">{untouchedCount}</p>
+                                </div>
+                            </div>
+                            <div className="bg-white rounded-2xl p-4 btn-thin border-tiffany-soft shadow-sm">
+                                <p className="text-xs font-black mb-3 text-tiffany-deep">全体進捗</p>
+                                <div className="h-4 bg-tiffany-soft rounded-full overflow-hidden">
+                                    <div className="h-full bg-tiffany-main transition-all duration-1000" style={{ width: `${(masteredCount / DATA.length) * 100}%` }} />
+                                </div>
+                                <p className="text-[10px] text-tiffany-light mt-2 text-right">{Math.round((masteredCount / DATA.length) * 100)}% 制覇</p>
+                            </div>
+                            <button onClick={() => { setViewMode('dojo'); pickNext(); }} className="w-full h-14 bg-tiffany-main text-white rounded-2xl font-black shadow-lg active:scale-95">道場に戻る</button>
                         </div>
-                        <button onClick={()=>window.location.reload()} className="text-slate-200"><i data-lucide="refresh-cw" className="w-5 h-5"></i></button>
+                    </div>
+                );
+            }
+
+            // 🎯 メイン道場画面
+            return (
+                <div className="h-screen bg-tiffany-bg flex flex-col overflow-hidden text-tiffany-deep">
+                    <nav className="bg-white/80 backdrop-blur-md border-b border-tiffany-soft flex items-center justify-between px-6 h-16 shrink-0 z-50">
+                        <button onClick={() => setAppState('setup')} className="text-tiffany-light hover:text-tiffany-main transition-transform">
+                            <i data-lucide="home" className="w-6 h-6"></i>
+                        </button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-[10px] font-black text-tiffany-main tracking-widest uppercase italic">Kimimaro Dojo</span>
+                            <span className="text-[9px] font-bold text-warm-brown">{sessionCount} / {targetCount}</span>
+                        </div>
+                        <button onClick={() => setViewMode('stats')} className="text-tiffany-light">
+                            <i data-lucide="bar-chart-3" className="w-5 h-5"></i>
+                        </button>
                     </nav>
 
                     <main className="flex-1 flex flex-col p-4 overflow-hidden max-w-md mx-auto w-full gap-4">
                         {viewMode === 'dojo' ? (
                             <>
-                                <div className="bg-white rounded-[2.5rem] border border-emerald-50 shadow-sm p-8 space-y-4 shrink-0 relative overflow-hidden">
-                                    <div className="bg-emerald-400 h-1 absolute top-0 left-0 transition-all duration-1000 origin-left" style={{ width: `${(sessionCount/targetCount)*100}%` }} />
+                                {/* 問題カード */}
+                                <div className="bg-white rounded-[2.5rem] btn-thin border-tiffany-soft shadow-sm p-8 space-y-4 shrink-0 relative overflow-hidden">
+                                    <div className="bg-tiffany-main h-1 absolute top-0 left-0 transition-all duration-1000 origin-left" style={{ width: `${(sessionCount / targetCount) * 100}%` }} />
                                     <div className="flex justify-between items-center">
-                                        <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full text-[10px] font-black uppercase tracking-widest">{currentQ.field || "民法"}</span>
+                                        <span className="px-3 py-1 bg-tiffany-soft text-tiffany-deep rounded-full text-[10px] font-black uppercase tracking-widest">{currentQ.field || "民法"}</span>
                                         <div className="flex gap-1.5">
                                             {[...Array(7)].map((_, i) => (
-                                                <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.count || 0) ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.8)]' : 'bg-slate-100'}`} />
+                                                <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.count || 0) ? 'bg-tiffany-main shadow-[0_0_8px_rgba(0,158,150,0.6)]' : 'bg-tiffany-soft'}`} />
                                             ))}
                                         </div>
                                     </div>
-                                    <p className="text-[19px] leading-relaxed text-[#1e293b] text-center font-bold min-h-[120px] flex items-center justify-center px-2">{currentQ.q}</p>
+                                    <p className="text-[19px] leading-relaxed text-warm-brown text-center font-bold min-h-[120px] flex items-center justify-center px-2">{currentQ.q}</p>
                                 </div>
 
+                                {/* 選択肢 or フィードバック */}
                                 {!showFeedback ? (
                                     <div className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "flex justify-center gap-10 py-6" : "flex flex-col gap-3 py-2 scrollbar-hide overflow-y-auto max-h-[40vh]"}>
                                         {shuffledChoices.map(c => (
-                                            <button key={c} onClick={() => handleAnswer(c)} className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "w-28 h-28 text-7xl rounded-full bg-white border-2 border-emerald-50 shadow-lg active:scale-75 transition-all transform hover:-translate-y-2 flex items-center justify-center" : "w-full min-h-[4rem] px-6 py-4 text-left font-black bg-white border-2 border-emerald-50 rounded-[1.5rem] active:scale-95 transition-all text-slate-700 shadow-sm flex items-center gap-4"}>
-                                                {currentQ.choices.length !== 2 && <div className="w-2.5 h-2.5 rounded-full bg-emerald-400" />}
+                                            <button key={c} onClick={() => handleAnswer(c)} className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "w-28 h-28 text-7xl rounded-full bg-white btn-thin border-tiffany-main shadow-lg active:scale-75 transition-all transform hover:-translate-y-2 flex items-center justify-center" : "w-full min-h-[4rem] px-6 py-4 text-left font-black bg-white btn-thin border-tiffany-main rounded-[1.5rem] active:scale-95 transition-all text-warm-brown shadow-sm flex items-center gap-4"}>
+                                                {currentQ.choices.length !== 2 && <div className="w-2.5 h-2.5 rounded-full bg-tiffany-main" />}
                                                 {c === "○" ? "🌸" : c === "×" ? "💩" : c}
                                             </button>
                                         ))}
                                     </div>
                                 ) : (
                                     <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden">
-                                        <div className={`p-6 rounded-[2.5rem] border-2 shadow-md shrink-0 ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                                        {/* 解説カード（薄ティファニー） */}
+                                        <div className={`p-6 rounded-[2.5rem] btn-thin shadow-md shrink-0 ${isCorrect ? 'bg-tiffany-soft border-tiffany-main' : 'bg-pink-blossom border-pink-deep'}`}>
                                             <div className="flex items-center gap-5 mb-4">
-                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-2xl font-black shadow-inner ${isCorrect ? 'bg-emerald-500' : 'bg-orange-400'}`}>{isCorrect ? '○' : '×'}</div>
-                                                <p className="text-[14px] font-black flex-1 italic leading-relaxed">{isCorrect ? currentQ.fb_ok : currentQ.fb_ng}</p>
+                                                <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-2xl font-black shadow-inner ${isCorrect ? 'bg-tiffany-main' : 'bg-pink-deep'}`}>{isCorrect ? '🌸' : '💩'}</div>
+                                                <p className={`text-[14px] font-black flex-1 leading-relaxed ${isCorrect ? 'text-tiffany-deep' : 'text-pink-deep'}`}>{isCorrect ? currentQ.fb_ok : currentQ.fb_ng}</p>
                                             </div>
                                             <div className="flex gap-2">
-                                                <button onClick={pickNext} className="flex-1 h-14 bg-emerald-600 text-white font-black rounded-2xl relative overflow-hidden active:scale-95 shadow-lg group">
+                                                <button onClick={pickNext} className="flex-1 h-14 bg-tiffany-main text-white font-black rounded-2xl relative overflow-hidden active:scale-95 shadow-lg group">
                                                     次へ進む <i data-lucide="chevron-right" className="inline w-5 h-5 ml-1 transition-transform group-hover:translate-x-1"></i>
-                                                    {!isPaused && <div className="absolute bottom-0 left-0 h-1.5 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: `${AUTO_NEXT_DELAY}ms` }} />}
+                                                    {!isPaused && <div className="absolute bottom-0 left-0 h-1.5 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: `${autoDelay}ms` }} />}
                                                 </button>
-                                                <button onClick={()=>setIsPaused(!isPaused)} className={`w-14 h-14 rounded-2xl border flex items-center justify-center ${isPaused ? 'bg-orange-100 text-orange-600' : 'bg-white text-slate-300'}`}>
+                                                <button onClick={() => {
+                                                    setIsPaused(p => {
+                                                        const next = !p;
+                                                        if (next && autoTimerRef.current) clearTimeout(autoTimerRef.current);
+                                                        return next;
+                                                    });
+                                                }} className={`w-14 h-14 rounded-2xl btn-thin flex items-center justify-center ${isPaused ? 'bg-pink-blossom text-pink-deep border-pink-deep' : 'bg-white text-tiffany-light border-tiffany-soft'}`}>
                                                     <i data-lucide={isPaused ? "play" : "pause"} className="w-6 h-6 fill-current"></i>
                                                 </button>
                                             </div>
+                                            {/* AI武装ボタン */}
                                             <div className="grid grid-cols-4 gap-2 mt-4">
                                                 {['else', 'detail', 'statute', 'practical'].map(type => (
-                                                    <button key={type} onClick={()=>handleAiCall(type)} 
-                                                        className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-tighter active:scale-95 border-none shadow-sm ${loadingState === type ? 'bg-emerald-500 text-white animate-pulse' : 'bg-white text-slate-400'}`}>
+                                                    <button key={type} onClick={() => handleAiCall(type)}
+                                                        className={`py-3 rounded-xl text-[9px] font-black uppercase tracking-tighter active:scale-95 btn-thin shadow-sm ${loadingState === type ? 'bg-tiffany-main text-white animate-pulse border-tiffany-deep' : 'bg-white text-tiffany-light border-tiffany-soft'}`}>
                                                         {type === 'else' ? 'Else' : type === 'detail' ? 'Logic' : type === 'statute' ? 'Law' : 'Hack'}
                                                     </button>
                                                 ))}
                                             </div>
                                         </div>
 
+                                        {/* 戦術ログ窓（暗背景にシアン文字） */}
                                         <div className="flex-1 glass-dark rounded-t-[3rem] p-8 overflow-y-auto scrollbar-hide text-slate-300 text-[14px] leading-loose shadow-2xl border-t border-white/10">
                                             <div className="flex items-center justify-between mb-6 border-b border-white/5 pb-4">
                                                 <div className="flex items-center gap-3">
-                                                    <i data-lucide="brain-circuit" className="w-5 h-5 text-emerald-400"></i>
+                                                    <i data-lucide="brain-circuit" className="w-5 h-5 text-tiffany-main"></i>
                                                     <span className="text-[10px] font-black text-white/20 tracking-[0.5em] uppercase">Tactical Logic Analyzer</span>
                                                 </div>
-                                                <span className="text-[8px] bg-emerald-900/50 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-black">STABLE v30</span>
+                                                <span className="text-[8px] bg-tiffany-deep/40 text-tiffany-main px-2 py-0.5 rounded btn-thin border-tiffany-main/30 font-black">v31 Tiffany</span>
                                             </div>
-                                            
-                                              {aiContent ? (
+
+                                            {aiContent ? (
                                                 <div className="animate-in fade-in duration-700 pb-12">
                                                     <p className="text-[14px] leading-loose whitespace-pre-wrap font-sans text-slate-200">{aiContent}</p>
                                                 </div>
                                             ) : (
-                                                <div className="h-full flex flex-col items-center justify-center opacity-10">
-                                                    <i data-lucide="brain-circuit" className="w-14 h-14 text-white mb-4"></i>
-                                                    <p className="text-[11px] text-white tracking-widest text-center uppercase font-black px-10">Select an analysis thread to deploy logic logs</p>
+                                                <div className="h-full flex flex-col items-center justify-center opacity-20">
+                                                    <i data-lucide="brain-circuit" className="w-14 h-14 text-tiffany-main mb-4"></i>
+                                                    <p className="text-[11px] text-white tracking-widest text-center uppercase font-black px-10">解析ボタンを押すと<br />詳細ログが表示されるちゃむ</p>
                                                 </div>
                                             )}
                                         </div>
@@ -291,15 +441,19 @@
                                 )}
                             </>
                         ) : (
+                            // 🎧 耳勉モード
                             <div className="flex-1 flex flex-col items-center justify-center space-y-8 text-center">
-                                <div className="bg-orange-200 w-32 h-32 rounded-full flex items-center justify-center shadow-2xl animate-pulse">
-                                    <i data-lucide="headphones" className="w-14 h-14 text-orange-600"></i>
+                                <div className="bg-pink-blossom w-32 h-32 rounded-full flex items-center justify-center shadow-2xl animate-pulse">
+                                    <i data-lucide="headphones" className="w-14 h-14 text-pink-deep"></i>
                                 </div>
                                 <div className="space-y-2">
-                                    <p className="text-base font-black text-slate-700">耳勉モード作動中ちゃむ</p>
-                                    <p className="text-xs text-slate-500 px-8">{currentQ?.q || "問題を準備中ちゃむ..."}</p>
+                                    <p className="text-base font-black text-tiffany-deep">耳勉モード作動中ちゃむ</p>
+                                    <p className="text-xs text-warm-brown px-8 leading-relaxed">{currentQ?.q || "問題を準備中ちゃむ..."}</p>
                                 </div>
-                                <button onClick={()=>{window.speechSynthesis.cancel(); setAppState('setup');}} className="px-8 py-3 bg-white border border-orange-200 text-orange-600 rounded-2xl font-black text-sm shadow-lg active:scale-95">停止して戻る</button>
+                                <button onClick={() => { window.speechSynthesis.cancel(); setAppState('setup'); }}
+                                    className="px-8 py-3 bg-white btn-thin border-pink-deep text-pink-deep rounded-2xl font-black text-sm shadow-lg active:scale-95">
+                                    停止して戻る
+                                </button>
                             </div>
                         )}
                     </main>
