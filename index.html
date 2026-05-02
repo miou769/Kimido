@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>きみまろ道場 v21.0 - 不屈の要塞</title>
+    <title>きみまろ道場 v23.0 - 司法書士不落要塞</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -14,7 +14,8 @@
         body { font-family: 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
         @keyframes timer-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
         .animate-timer-bar { animation: timer-bar linear forwards; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-[#f8faf8]">
@@ -23,60 +24,69 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-        // --- 強力なクリーニング関数 ---
-        const repairDirtyJson = (text) => {
-            let cleaned = text.trim();
-            // 1. 全角文字を半角へ
-            cleaned = cleaned.replace(/[“”„〝〞]/g, '"').replace(/[，]/g, ',').replace(/[：]/g, ':');
-            // 2. 文末の余計なカンマを削除
-            cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
-            // 3. オブジェクト間のカンマ抜けを補完 ( } {  ->  }, { )
-            cleaned = cleaned.replace(/\}\s*\{/g, '}, {');
-            // 4. 改行コードや制御文字の掃除
-            cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
-            return cleaned;
+        // --- 🧪 究極の「不屈のパース」エンジン ---
+        const bulletproofParse = (text) => {
+            // 1. 基本クリーニング（全角修正など）
+            let s = text.trim();
+            s = s.replace(/[“”„〝〞]/g, '"').replace(/[，]/g, ',').replace(/[：]/g, ':');
+            s = s.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+
+            try {
+                // まずは普通にパースを試みる
+                return JSON.parse(s);
+            } catch (e) {
+                console.warn("通常の読み込みに失敗。救急モードに移行するちゃむ！");
+                
+                // 2. 正規表現でオブジェクト { ... } を1つずつ引っこ抜く荒業
+                // データの途中で切れていても、完成しているオブジェクトだけを救出するちゃむ
+                const results = [];
+                const regex = /\{[\s\S]*?\}/g; 
+                let match;
+                
+                while ((match = regex.exec(s)) !== null) {
+                    try {
+                        const obj = JSON.parse(match[0]);
+                        if (obj.q && obj.a) results.push(obj);
+                    } catch (err) {
+                        // 壊れている個体は無視して次へ行くちゃむ
+                    }
+                }
+
+                if (results.length > 0) return results;
+                throw new Error("救出できるデータが1件もなかったちゃむ...ファイルの中身を確認してくだちゃい。");
+            }
         };
 
         function App() {
             const [DATA, setDATA] = useState(null);
-            const [errorLog, setErrorLog] = useState(null);
+            const [errorMsg, setErrorMsg] = useState(null);
             const [appState, setAppState] = useState('setup');
             const [currentIndex, setCurrentIndex] = useState(0);
-            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v21-mastery') || '{}'));
+            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v23-mastery') || '{}'));
             const [sessionCount, setSessionCount] = useState(0);
+            const [targetCount, setTargetCount] = useState(100);
             const [shuffledChoices, setShuffledChoices] = useState([]);
             const [showFeedback, setShowFeedback] = useState(false);
             const [isCorrect, setIsCorrect] = useState(null);
+            const autoTimerRef = useRef(null);
 
             useEffect(() => {
                 const loadData = async () => {
                     try {
                         const response = await fetch(`./questions.json?v=${Date.now()}`);
-                        if (!response.ok) throw new Error("File not found");
+                        if (!response.ok) throw new Error("questions.jsonが見つかりませんちゃむ。");
                         
-                        const rawText = await response.text();
-                        const repairedText = repairDirtyJson(rawText);
+                        const raw = await response.text();
+                        const data = bulletproofParse(raw);
                         
-                        let jsonData;
-                        try {
-                            jsonData = JSON.parse(repairedText);
-                        } catch (parseErr) {
-                            // それでもダメな場合、行単位で解析
-                            console.error("Parse Fail:", parseErr);
-                            throw new Error(`JSONの文法が壊れています。ID ${parseErr.message.split(' ').pop()} 付近をチェックしてくだちゃい。`);
-                        }
-
-                        if (!Array.isArray(jsonData)) throw new Error("Array format error");
-
-                        setDATA(jsonData.map((q, i) => ({
+                        setDATA(data.map((q, i) => ({
                             ...q,
                             id: q.id || i + 1,
-                            field: q.field || "民法",
+                            field: q.field || "未分類",
                             choices: q.choices || ["○", "×"]
                         })));
                     } catch (err) {
-                        setErrorLog(err.message);
-                        setDATA([{ id: 999, field: "ERROR", q: `データ破損：${err.message}`, a: "○", choices: ["○", "×"], fb_ok: "リロード" }]);
+                        setErrorMsg(err.message);
                     }
                 };
                 loadData();
@@ -85,18 +95,22 @@
             const currentQ = useMemo(() => DATA ? (DATA[currentIndex] || DATA[0]) : null, [DATA, currentIndex]);
 
             const handleAnswer = (choice) => {
+                if (showFeedback) return;
                 const correct = choice === currentQ.a;
                 setIsCorrect(correct);
                 setShowFeedback(true);
                 setSessionCount(s => s + 1);
+
                 const r = results[currentQ.id] || { count: 0 };
                 const newRes = { ...results, [currentQ.id]: { count: (r.count || 0) + (correct ? 1 : 0) } };
                 setResults(newRes);
-                localStorage.setItem('kimimaro-v21-mastery', JSON.stringify(newRes));
-                setTimeout(pickNext, 10000);
+                localStorage.setItem('kimimaro-v23-mastery', JSON.stringify(newRes));
+
+                autoTimerRef.current = setTimeout(pickNext, 12000);
             };
 
             const pickNext = () => {
+                if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
                 const idx = Math.floor(Math.random() * DATA.length);
                 setCurrentIndex(idx);
                 setShuffledChoices([...(DATA[idx].choices || ["○", "×"])].sort(() => Math.random() - 0.5));
@@ -104,90 +118,101 @@
                 setIsCorrect(null);
             };
 
+            if (errorMsg) return (
+                <div className="h-screen bg-slate-900 flex flex-col items-center justify-center p-10 text-center">
+                    <i data-lucide="alert-circle" className="w-16 h-16 text-red-500 mb-4"></i>
+                    <h2 className="text-white font-black text-xl mb-2">起動失敗だちゃむ！</h2>
+                    <p className="text-red-300 text-sm mb-6">{errorMsg}</p>
+                    <button onClick={()=>window.location.reload()} className="px-8 py-4 bg-emerald-600 text-white rounded-2xl font-black">再起動を試みる</button>
+                </div>
+            );
+
             if (!DATA) return (
                 <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-emerald-400">
                     <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="text-xs font-black uppercase tracking-widest">Forcing Access to Arsenal...</p>
+                    <p className="text-[10px] font-black tracking-widest uppercase">Emergency System Initializing...</p>
                 </div>
             );
 
             if (appState === 'setup') return (
                 <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white text-center">
-                    <div className="max-w-md w-full space-y-8">
-                        <div className="bg-emerald-500 w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-2xl rotate-3">
-                            <i data-lucide="shield-check" className="w-8 h-8"></i>
+                    <div className="max-w-md w-full space-y-10">
+                        <div className="space-y-4">
+                            <div className="bg-emerald-500 w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-2xl rotate-3"><i data-lucide="shield-check" className="w-8 h-8 text-white"></i></div>
+                            <h1 className="text-3xl font-black tracking-tighter italic">きみまろ道場</h1>
+                            <div className="px-3 py-1 bg-emerald-900/40 rounded-full text-[10px] font-bold text-emerald-400 inline-block border border-emerald-500/30">v23.0 Survivor Mode</div>
+                            <div className="p-4 bg-white/5 border border-white/10 rounded-2xl">
+                                <p className="text-xs font-bold text-emerald-400">✅ 接続完了</p>
+                                <p className="text-xl font-black text-white">{DATA.length}問 救出成功！</p>
+                            </div>
                         </div>
-                        <h1 className="text-3xl font-black tracking-tight italic">きみまろ道場</h1>
-                        
-                        {errorLog ? (
-                            <div className="p-5 bg-red-900/30 border border-red-500/40 rounded-[2rem] text-left">
-                                <p className="text-red-400 text-[10px] font-black uppercase mb-1">⚠️ Syntax Alert</p>
-                                <p className="text-xs text-red-100 leading-relaxed">{errorLog}</p>
-                                <button onClick={()=>window.location.reload()} className="mt-4 w-full py-3 bg-red-500/20 text-red-400 rounded-xl font-bold text-xs">RETRY SYNC</button>
-                            </div>
-                        ) : (
-                            <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl">
-                                <p className="text-emerald-400 text-[10px] font-black uppercase mb-1">✅ Connection Stabilized</p>
-                                <p className="text-xl font-black text-white">{DATA.length}問 準備完了</p>
-                            </div>
-                        )}
-
-                        {!errorLog && (
-                            <div className="grid grid-cols-2 gap-4">
-                                {[20, 50, 100, 200].map(n => (
-                                    <button key={n} onClick={() => { setAppState('dojo'); pickNext(); }}
-                                        className="h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-black hover:bg-emerald-600 transition-all">
-                                        {n}問
-                                    </button>
-                                ))}
-                            </div>
-                        )}
+                        <div className="grid grid-cols-2 gap-4 px-4">
+                            {[20, 50, 100, 200].map(n => (
+                                <button key={n} onClick={() => { setTargetCount(n); setAppState('dojo'); pickNext(); }}
+                                    className="h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-black hover:bg-emerald-600 transition-all active:scale-95">
+                                    {n}問
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
             );
 
             return (
-                <div className="h-screen bg-[#f8faf8] flex flex-col overflow-hidden text-slate-800">
+                <div className="h-screen bg-[#f8faf8] flex flex-col overflow-hidden text-slate-800 select-none">
                     <nav className="bg-white/80 backdrop-blur-md border-b border-emerald-100 flex items-center justify-between px-6 h-14 shrink-0 z-50">
-                        <button onClick={()=>setAppState('setup')} className="text-slate-300"><i data-lucide="home" className="w-6 h-6"></i></button>
-                        <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Operational Dojo</span>
-                        <button onClick={()=>window.location.reload()} className="text-slate-300"><i data-lucide="refresh-cw" className="w-5 h-5"></i></button>
+                        <button onClick={()=>setAppState('setup')} className="text-slate-300 hover:text-emerald-500"><i data-lucide="home" className="w-6 h-6"></i></button>
+                        <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase italic italic">Dojo Operational</span>
+                        <button onClick={()=>window.location.reload()} className="text-slate-200"><i data-lucide="refresh-cw" className="w-5 h-5"></i></button>
                     </nav>
+
                     <main className="flex-1 flex flex-col p-4 overflow-hidden max-w-md mx-auto w-full gap-4">
                         <div className="bg-white rounded-[2.5rem] border border-emerald-50 shadow-sm p-8 space-y-4 shrink-0 relative overflow-hidden">
-                            <div className="bg-emerald-400 h-1 absolute top-0 left-0 transition-all" style={{ width: `${(sessionCount/100)*100}%` }} />
-                            <div className="flex justify-between items-center">
-                                <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-tight">{currentQ.field}</span>
+                            <div className="bg-emerald-400 h-1 absolute top-0 left-0 transition-all duration-1000" style={{ width: `${(sessionCount/targetCount)*100}%` }} />
+                            <div className="flex justify-between items-center text-[10px] font-black">
+                                <span className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full uppercase tracking-widest">{currentQ.field}</span>
                                 <div className="flex gap-1">
                                     {[...Array(7)].map((_, i) => (
-                                        <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.count || 0) ? 'bg-emerald-400 shadow-md' : 'bg-slate-100'}`} />
+                                        <div key={i} className={`w-2 h-2 rounded-full ${i < (results[currentQ.id]?.count || 0) ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-slate-100'}`} />
                                     ))}
                                 </div>
                             </div>
-                            <p className="text-[18px] leading-relaxed text-[#334155] text-center font-bold min-h-[120px] flex items-center justify-center">{currentQ.q}</p>
+                            <p className="text-[18px] leading-relaxed text-[#334155] text-center font-bold min-h-[120px] flex items-center justify-center">
+                                {currentQ.q}
+                            </p>
                         </div>
 
                         {!showFeedback ? (
-                            <div className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "flex justify-center gap-10 py-4" : "flex flex-col gap-3 py-2"}>
+                            <div className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "flex justify-center gap-10 py-4" : "flex flex-col gap-3 py-2 scrollbar-hide overflow-y-auto"}>
                                 {shuffledChoices.map(c => (
-                                    <button key={c} onClick={() => handleAnswer(c)} className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "w-24 h-24 text-6xl rounded-full bg-white border-2 border-emerald-50 shadow-lg active:scale-75 transition-all" : "w-full min-h-[3.8rem] px-6 text-left font-black bg-white border-2 border-emerald-50 rounded-2xl active:scale-95 transition-all"}>
+                                    <button key={c} onClick={() => handleAnswer(c)} 
+                                        className={currentQ.choices.length === 2 && currentQ.choices.includes("○") 
+                                            ? "w-24 h-24 text-6xl rounded-full bg-white border-2 border-emerald-50 shadow-lg active:scale-75 transition-all flex items-center justify-center"
+                                            : "w-full min-h-[3.8rem] px-6 py-4 text-left font-black bg-white border-2 border-emerald-50 rounded-2xl active:scale-95 transition-all text-slate-700 flex items-center gap-4"
+                                        }>
+                                        {currentQ.choices.length !== 2 && <div className="w-2 h-2 rounded-full bg-emerald-300" />}
                                         {c === "○" ? "🌸" : c === "×" ? "💩" : c}
                                     </button>
                                 ))}
                             </div>
                         ) : (
-                            <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in slide-in-from-bottom-4 overflow-hidden">
-                                <div className={`p-6 rounded-[2.5rem] border-2 shadow-md ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black ${isCorrect ? 'bg-emerald-500' : 'bg-orange-400'}`}>{isCorrect ? '○' : '×'}</div>
-                                        <p className="text-[14px] font-black leading-relaxed flex-1">{isCorrect ? currentQ.fb_ok : currentQ.fb_ng}</p>
+                            <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500 overflow-hidden">
+                                <div className={`p-6 rounded-[2.5rem] border-2 shadow-md shrink-0 ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                                    <div className="flex items-center gap-5 mb-4">
+                                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-xl font-black shadow-inner ${isCorrect ? 'bg-emerald-500' : 'bg-orange-400'}`}>
+                                            {isCorrect ? '○' : '×'}
+                                        </div>
+                                        <p className="text-[14px] font-black leading-relaxed flex-1 italic text-slate-800">
+                                            {isCorrect ? currentQ.fb_ok : currentQ.fb_ng}
+                                        </p>
                                     </div>
-                                    <button onClick={pickNext} className="w-full h-14 bg-emerald-600 text-white font-black rounded-2xl active:scale-95 shadow-lg relative overflow-hidden">
-                                        NEXT TARGET <div className="absolute bottom-0 left-0 h-1 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: '10000ms' }} />
+                                    <button onClick={pickNext} className="w-full h-14 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-2xl active:scale-95 shadow-lg relative overflow-hidden group">
+                                        NEXT TARGET <i data-lucide="chevron-right" className="inline w-5 h-5 ml-1 transition-transform group-hover:translate-x-1"></i>
+                                        <div className="absolute bottom-0 left-0 h-1.5 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: '12000ms' }} />
                                     </button>
                                 </div>
-                                <div className="flex-1 bg-slate-900 rounded-t-[3rem] p-8 text-slate-300 text-sm leading-loose overflow-y-auto scrollbar-hide border-t border-white/5">
-                                    {currentQ.statute && <div className="text-emerald-400 font-black mb-2 flex items-center gap-2"><i data-lucide="book" className="w-4 h-4"></i> {currentQ.statute}</div>}
+                                <div className="flex-1 bg-slate-900 rounded-t-[3rem] p-8 overflow-y-auto scrollbar-hide text-slate-300 text-[14px] leading-loose border-t border-white/5 shadow-2xl">
+                                    {currentQ.statute && <div className="text-emerald-400 font-black mb-3 flex items-center gap-2"><i data-lucide="book" className="w-4 h-4"></i> {currentQ.statute}</div>}
                                     {currentQ.else_trap && <div className="bg-white/5 p-5 rounded-2xl border border-white/10 text-slate-400 italic">{currentQ.else_trap}</div>}
                                 </div>
                             </div>
@@ -199,8 +224,10 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-        window.addEventListener('load', () => lucide.createIcons());
-        document.addEventListener('click', () => setTimeout(() => lucide.createIcons(), 50));
+
+        const refreshIcons = () => { if (window.lucide) window.lucide.createIcons(); };
+        window.addEventListener('load', refreshIcons);
+        document.addEventListener('click', () => setTimeout(refreshIcons, 50));
     </script>
 </body>
 </html>
