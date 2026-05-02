@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>きみまろ道場 v20.7 - 合格診断システム</title>
-    <!-- 外部ライブラリ -->
+    <title>きみまろ道場 v21.0 - 不屈の要塞</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -15,8 +14,7 @@
         body { font-family: 'Noto Sans JP', sans-serif; -webkit-tap-highlight-color: transparent; }
         @keyframes timer-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
         .animate-timer-bar { animation: timer-bar linear forwards; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; scrollbar-width: none; }
     </style>
 </head>
 <body class="bg-[#f8faf8]">
@@ -25,71 +23,60 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
-        // --- カスタムUI部品 ---
-        const Badge = ({ children, className = "" }) => (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ${className}`}>{children}</span>
-        );
-
-        const Card = ({ children, className = "" }) => (
-            <div className={`bg-white rounded-[2rem] shadow-sm border border-emerald-50 overflow-hidden ${className}`}>{children}</div>
-        );
+        // --- 強力なクリーニング関数 ---
+        const repairDirtyJson = (text) => {
+            let cleaned = text.trim();
+            // 1. 全角文字を半角へ
+            cleaned = cleaned.replace(/[“”„〝〞]/g, '"').replace(/[，]/g, ',').replace(/[：]/g, ':');
+            // 2. 文末の余計なカンマを削除
+            cleaned = cleaned.replace(/,\s*([\]}])/g, '$1');
+            // 3. オブジェクト間のカンマ抜けを補完 ( } {  ->  }, { )
+            cleaned = cleaned.replace(/\}\s*\{/g, '}, {');
+            // 4. 改行コードや制御文字の掃除
+            cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+            return cleaned;
+        };
 
         function App() {
             const [DATA, setDATA] = useState(null);
             const [errorLog, setErrorLog] = useState(null);
             const [appState, setAppState] = useState('setup');
-            const [targetCount, setTargetCount] = useState(100);
             const [currentIndex, setCurrentIndex] = useState(0);
-            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v20-mastery') || '{}'));
+            const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-v21-mastery') || '{}'));
             const [sessionCount, setSessionCount] = useState(0);
-            const [history, setHistory] = useState([]);
             const [shuffledChoices, setShuffledChoices] = useState([]);
             const [showFeedback, setShowFeedback] = useState(false);
             const [isCorrect, setIsCorrect] = useState(null);
-            const autoTimerRef = useRef(null);
 
-            // 🔍 データロード・診断システム
             useEffect(() => {
                 const loadData = async () => {
                     try {
-                        // キャッシュを無視して最新のファイルを強制取得するハックだちゃむ！
                         const response = await fetch(`./questions.json?v=${Date.now()}`);
+                        if (!response.ok) throw new Error("File not found");
                         
-                        if (!response.ok) {
-                            throw new Error(`ファイルが見つかりません (HTTP ${response.status})。GitHub上のファイル名がすべて小文字の 'questions.json' になっているか確認してくだちゃい！`);
-                        }
-
-                        const text = await response.text();
+                        const rawText = await response.text();
+                        const repairedText = repairDirtyJson(rawText);
+                        
                         let jsonData;
                         try {
-                            jsonData = JSON.parse(text);
+                            jsonData = JSON.parse(repairedText);
                         } catch (parseErr) {
-                            throw new Error(`JSONの文法エラーだちゃむ！カンマやカッコが足りない可能性があります。中身を確認してくだちゃい。`);
+                            // それでもダメな場合、行単位で解析
+                            console.error("Parse Fail:", parseErr);
+                            throw new Error(`JSONの文法が壊れています。ID ${parseErr.message.split(' ').pop()} 付近をチェックしてくだちゃい。`);
                         }
 
-                        if (!Array.isArray(jsonData)) {
-                            throw new Error(`データが配列形式 [ ... ] ではありません。`);
-                        }
+                        if (!Array.isArray(jsonData)) throw new Error("Array format error");
 
-                        // 旧フォーマットの弾薬も自動的に最新型へ変換するコンバーターだちゃむ！
-                        const upgradedData = jsonData.map((q, idx) => ({
-                            id: q.id || idx + 1,
-                            field: q.field || "民法一般",
-                            tag: q.tag || "論点不明",
-                            q: q.q || "問題文がありません",
-                            a: q.a || "○",
-                            choices: q.choices || ["○", "×"], // 選択肢がない場合は自動で○×にする
-                            fb_ok: q.fb_ok || "正解ちゃむ！",
-                            fb_ng: q.fb_ng || "残念、次は正解するちゃむ！",
-                            else_trap: q.else_trap || "",
-                            statute: q.statute || ""
-                        }));
-
-                        setDATA(upgradedData);
+                        setDATA(jsonData.map((q, i) => ({
+                            ...q,
+                            id: q.id || i + 1,
+                            field: q.field || "民法",
+                            choices: q.choices || ["○", "×"]
+                        })));
                     } catch (err) {
                         setErrorLog(err.message);
-                        // 失敗しても止まらないための緊急用予備データ
-                        setDATA([{ id: 999, field: "通信エラー", q: `エラー：${err.message}`, a: "○", choices: ["○", "×"], fb_ok: "リロードしてくだちゃい！" }]);
+                        setDATA([{ id: 999, field: "ERROR", q: `データ破損：${err.message}`, a: "○", choices: ["○", "×"], fb_ok: "リロード" }]);
                     }
                 };
                 loadData();
@@ -97,163 +84,114 @@
 
             const currentQ = useMemo(() => DATA ? (DATA[currentIndex] || DATA[0]) : null, [DATA, currentIndex]);
 
-            const handleShuffleChoices = useCallback((idx) => {
-                if (!DATA || !DATA[idx]) return;
-                const q = DATA[idx];
-                setShuffledChoices([...(q.choices || ["○", "×"])].sort(() => Math.random() - 0.5));
-            }, [DATA]);
-
-            const pickNext = useCallback(() => {
-                if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
-                if (!DATA) return;
-                const nextIdx = Math.floor(Math.random() * DATA.length);
-                setCurrentIndex(nextIdx);
-                handleShuffleChoices(nextIdx);
-                setShowFeedback(false);
-                setIsCorrect(null);
-            }, [handleShuffleChoices, DATA]);
-
             const handleAnswer = (choice) => {
-                if (showFeedback || !currentQ) return;
                 const correct = choice === currentQ.a;
                 setIsCorrect(correct);
                 setShowFeedback(true);
-                setSessionCount(prev => prev + 1);
-
-                const r = results[currentQ.id] || { correct_count: 0 };
-                const newResults = { ...results, [currentQ.id]: { correct_count: r.correct_count + (correct ? 1 : 0) } };
-                setResults(newResults);
-                localStorage.setItem('kimimaro-v20-mastery', JSON.stringify(newResults));
-                
-                autoTimerRef.current = setTimeout(pickNext, 10000);
+                setSessionCount(s => s + 1);
+                const r = results[currentQ.id] || { count: 0 };
+                const newRes = { ...results, [currentQ.id]: { count: (r.count || 0) + (correct ? 1 : 0) } };
+                setResults(newRes);
+                localStorage.setItem('kimimaro-v21-mastery', JSON.stringify(newRes));
+                setTimeout(pickNext, 10000);
             };
 
-            // ロード画面
+            const pickNext = () => {
+                const idx = Math.floor(Math.random() * DATA.length);
+                setCurrentIndex(idx);
+                setShuffledChoices([...(DATA[idx].choices || ["○", "×"])].sort(() => Math.random() - 0.5));
+                setShowFeedback(false);
+                setIsCorrect(null);
+            };
+
             if (!DATA) return (
                 <div className="h-screen flex flex-col items-center justify-center bg-slate-900 text-emerald-400">
                     <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                    <p className="text-xs font-black tracking-widest uppercase animate-pulse">Scanning Arsenal...</p>
+                    <p className="text-xs font-black uppercase tracking-widest">Forcing Access to Arsenal...</p>
                 </div>
             );
 
-            // セットアップ画面（診断結果も表示）
             if (appState === 'setup') return (
-                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white">
-                    <div className="max-w-md w-full space-y-12 text-center">
-                        <div className="space-y-4">
-                            <div className="bg-emerald-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-lg rotate-3">
-                                <i data-lucide="target" className="w-8 h-8 text-white"></i>
-                            </div>
-                            <h1 className="text-3xl font-black tracking-tight">きみまろ道場</h1>
-                            <Badge className="bg-white/10 text-emerald-400">v20.7 Auto-Repair Active</Badge>
-                            
-                            {errorLog ? (
-                                <div className="mt-4 p-4 bg-red-900/40 border border-red-500/50 rounded-[1.5rem] text-left">
-                                    <p className="text-red-400 text-[10px] font-black uppercase mb-1">⚠️ Load Failure Detected</p>
-                                    <p className="text-xs leading-relaxed text-red-100">{errorLog}</p>
-                                </div>
-                            ) : (
-                                <div className="mt-4 p-3 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl">
-                                    <p className="text-emerald-400 text-[10px] font-black uppercase mb-1">✅ Connection Stabilized</p>
-                                    <p className="text-sm font-bold text-white">装填完了：{DATA.length}問</p>
-                                </div>
-                            )}
+                <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white text-center">
+                    <div className="max-w-md w-full space-y-8">
+                        <div className="bg-emerald-500 w-16 h-16 rounded-[1.5rem] flex items-center justify-center mx-auto shadow-2xl rotate-3">
+                            <i data-lucide="shield-check" className="w-8 h-8"></i>
                         </div>
+                        <h1 className="text-3xl font-black tracking-tight italic">きみまろ道場</h1>
                         
-                        <div className="grid grid-cols-2 gap-3 px-4">
-                            {[20, 50, 100, 200].map(n => (
-                                <button key={n} onClick={() => { setTargetCount(n); setSessionCount(0); setAppState('dojo'); handleShuffleChoices(currentIndex); }}
-                                    className="h-16 rounded-xl bg-white/5 border border-white/10 text-lg font-black active:scale-95 transition-all hover:bg-emerald-600">
-                                    {n}問 撃破
-                                </button>
-                            ))}
-                        </div>
-                        <p className="text-[10px] text-slate-500 font-bold tracking-widest uppercase">Select questions to start</p>
+                        {errorLog ? (
+                            <div className="p-5 bg-red-900/30 border border-red-500/40 rounded-[2rem] text-left">
+                                <p className="text-red-400 text-[10px] font-black uppercase mb-1">⚠️ Syntax Alert</p>
+                                <p className="text-xs text-red-100 leading-relaxed">{errorLog}</p>
+                                <button onClick={()=>window.location.reload()} className="mt-4 w-full py-3 bg-red-500/20 text-red-400 rounded-xl font-bold text-xs">RETRY SYNC</button>
+                            </div>
+                        ) : (
+                            <div className="p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-2xl">
+                                <p className="text-emerald-400 text-[10px] font-black uppercase mb-1">✅ Connection Stabilized</p>
+                                <p className="text-xl font-black text-white">{DATA.length}問 準備完了</p>
+                            </div>
+                        )}
+
+                        {!errorLog && (
+                            <div className="grid grid-cols-2 gap-4">
+                                {[20, 50, 100, 200].map(n => (
+                                    <button key={n} onClick={() => { setAppState('dojo'); pickNext(); }}
+                                        className="h-16 rounded-2xl bg-white/5 border border-white/10 text-xl font-black hover:bg-emerald-600 transition-all">
+                                        {n}問
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
             );
 
-            // 道場
             return (
                 <div className="h-screen bg-[#f8faf8] flex flex-col overflow-hidden text-slate-800">
-                    <nav className="bg-white border-b border-emerald-100 flex justify-around items-center shrink-0 h-14 z-50 shadow-sm px-2">
-                        <button onClick={() => setAppState('setup')} className="flex-1 flex flex-col items-center justify-center h-full text-slate-300">
-                            <i data-lucide="refresh-ccw" className="w-5 h-5 mb-0.5"></i>
-                            <span className="text-[8px] font-black uppercase">Home</span>
-                        </button>
+                    <nav className="bg-white/80 backdrop-blur-md border-b border-emerald-100 flex items-center justify-between px-6 h-14 shrink-0 z-50">
+                        <button onClick={()=>setAppState('setup')} className="text-slate-300"><i data-lucide="home" className="w-6 h-6"></i></button>
+                        <span className="text-[10px] font-black tracking-widest text-slate-400 uppercase">Operational Dojo</span>
+                        <button onClick={()=>window.location.reload()} className="text-slate-300"><i data-lucide="refresh-cw" className="w-5 h-5"></i></button>
                     </nav>
-
-                    <main className="flex-1 flex flex-col min-h-0 px-4 pt-4 overflow-hidden">
-                        <div className="max-w-md mx-auto w-full flex flex-col h-full gap-4">
-                            <Card className="bg-[#f2fcf5] shrink-0 border relative">
-                                <div className="bg-emerald-400/20 h-1" style={{ width: `${(sessionCount/targetCount)*100}%` }} />
-                                <div className="p-6 space-y-4">
-                                    <div className="flex justify-between items-center">
-                                        <Badge className="bg-white text-emerald-600 border border-emerald-200 px-2 tracking-tight">
-                                            {currentQ.field} • {sessionCount}/{targetCount}
-                                        </Badge>
-                                        <div className="flex gap-1.5">
-                                            {[...Array(7)].map((_, i) => (
-                                                <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.correct_count || 0) ? 'bg-emerald-400' : 'bg-slate-200'}`} />
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <p className="text-base leading-relaxed text-[#4a3c32] text-center font-medium min-h-[100px] flex items-center justify-center">
-                                        {currentQ.q}
-                                    </p>
+                    <main className="flex-1 flex flex-col p-4 overflow-hidden max-w-md mx-auto w-full gap-4">
+                        <div className="bg-white rounded-[2.5rem] border border-emerald-50 shadow-sm p-8 space-y-4 shrink-0 relative overflow-hidden">
+                            <div className="bg-emerald-400 h-1 absolute top-0 left-0 transition-all" style={{ width: `${(sessionCount/100)*100}%` }} />
+                            <div className="flex justify-between items-center">
+                                <span className="px-2 py-1 bg-emerald-50 text-emerald-600 rounded-lg text-[10px] font-black uppercase tracking-tight">{currentQ.field}</span>
+                                <div className="flex gap-1">
+                                    {[...Array(7)].map((_, i) => (
+                                        <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.count || 0) ? 'bg-emerald-400 shadow-md' : 'bg-slate-100'}`} />
+                                    ))}
                                 </div>
-                            </Card>
-
-                            {!showFeedback ? (
-                                currentQ.choices.length === 2 && currentQ.choices.includes("○") ? (
-                                    <div className="flex justify-center gap-12 py-3 shrink-0">
-                                        {shuffledChoices.map(c => (
-                                            <button key={c} onClick={() => handleAnswer(c)} className="w-24 h-24 text-6xl flex items-center justify-center rounded-full shadow-sm border bg-white active:scale-95">
-                                                {c === "○" ? "🌸" : "💩"}
-                                            </button>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col gap-2 py-1 shrink-0 px-4 overflow-y-auto max-h-[35vh]">
-                                        {shuffledChoices.map(c => (
-                                            <button key={c} onClick={() => handleAnswer(c)} className="w-full min-h-[3.5rem] px-4 py-2 text-[14px] font-bold rounded-xl shadow-sm border bg-white active:scale-95 text-[#4a3c32]">
-                                                {c}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )
-                            ) : (
-                                <div className="flex-1 flex flex-col min-h-0 gap-3 animate-in fade-in slide-in-from-bottom-2">
-                                    <div className={`p-5 rounded-[2rem] border flex flex-col gap-4 shadow-sm shrink-0 ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black ${isCorrect ? 'bg-emerald-500' : 'bg-orange-400'}`}>
-                                                {isCorrect ? '○' : '×'}
-                                            </div>
-                                            <p className={`text-[13px] font-bold leading-relaxed flex-1 ${isCorrect ? 'text-emerald-800' : 'text-orange-900'}`}>
-                                                {isCorrect ? currentQ.fb_ok : currentQ.fb_ng}
-                                            </p>
-                                        </div>
-                                        <button onClick={pickNext} className="w-full h-12 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-2xl relative overflow-hidden active:scale-95 shadow-none border-none">
-                                            次へ進む <i data-lucide="arrow-right" className="inline w-4 h-4 ml-1.5"></i>
-                                            <div className="absolute bottom-0 left-0 h-1 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: '10000ms' }} />
-                                        </button>
-                                    </div>
-                                    <div className="flex-1 min-h-0 bg-slate-900 rounded-t-[2.5rem] flex flex-col">
-                                        <div className="p-4 border-b border-white/5 flex items-center justify-between">
-                                            <span className="text-[10px] font-black text-white/30 tracking-widest uppercase">System Log</span>
-                                            <i data-lucide="brain-circuit" className="w-4 h-4 text-emerald-500/50"></i>
-                                        </div>
-                                        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide text-slate-300 text-sm leading-relaxed">
-                                            {currentQ.statute && <div className="text-emerald-400 font-bold mb-2">📜 {currentQ.statute}</div>}
-                                            {currentQ.else_trap && <div className="bg-white/5 p-3 rounded-lg border border-white/10 mb-4">{currentQ.else_trap}</div>}
-                                            {!currentQ.statute && !currentQ.else_trap && (
-                                                <p className="text-[10px] opacity-20 uppercase text-center mt-10">Advanced data missing for this record</p>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            </div>
+                            <p className="text-[18px] leading-relaxed text-[#334155] text-center font-bold min-h-[120px] flex items-center justify-center">{currentQ.q}</p>
                         </div>
+
+                        {!showFeedback ? (
+                            <div className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "flex justify-center gap-10 py-4" : "flex flex-col gap-3 py-2"}>
+                                {shuffledChoices.map(c => (
+                                    <button key={c} onClick={() => handleAnswer(c)} className={currentQ.choices.length === 2 && currentQ.choices.includes("○") ? "w-24 h-24 text-6xl rounded-full bg-white border-2 border-emerald-50 shadow-lg active:scale-75 transition-all" : "w-full min-h-[3.8rem] px-6 text-left font-black bg-white border-2 border-emerald-50 rounded-2xl active:scale-95 transition-all"}>
+                                        {c === "○" ? "🌸" : c === "×" ? "💩" : c}
+                                    </button>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex-1 flex flex-col min-h-0 gap-4 animate-in fade-in slide-in-from-bottom-4 overflow-hidden">
+                                <div className={`p-6 rounded-[2.5rem] border-2 shadow-md ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                                    <div className="flex items-center gap-4 mb-4">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-black ${isCorrect ? 'bg-emerald-500' : 'bg-orange-400'}`}>{isCorrect ? '○' : '×'}</div>
+                                        <p className="text-[14px] font-black leading-relaxed flex-1">{isCorrect ? currentQ.fb_ok : currentQ.fb_ng}</p>
+                                    </div>
+                                    <button onClick={pickNext} className="w-full h-14 bg-emerald-600 text-white font-black rounded-2xl active:scale-95 shadow-lg relative overflow-hidden">
+                                        NEXT TARGET <div className="absolute bottom-0 left-0 h-1 bg-white/30 animate-timer-bar origin-left w-full" style={{ animationDuration: '10000ms' }} />
+                                    </button>
+                                </div>
+                                <div className="flex-1 bg-slate-900 rounded-t-[3rem] p-8 text-slate-300 text-sm leading-loose overflow-y-auto scrollbar-hide border-t border-white/5">
+                                    {currentQ.statute && <div className="text-emerald-400 font-black mb-2 flex items-center gap-2"><i data-lucide="book" className="w-4 h-4"></i> {currentQ.statute}</div>}
+                                    {currentQ.else_trap && <div className="bg-white/5 p-5 rounded-2xl border border-white/10 text-slate-400 italic">{currentQ.else_trap}</div>}
+                                </div>
+                            </div>
+                        )}
                     </main>
                 </div>
             );
@@ -261,7 +199,6 @@
 
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(<App />);
-
         window.addEventListener('load', () => lucide.createIcons());
         document.addEventListener('click', () => setTimeout(() => lucide.createIcons(), 50));
     </script>
