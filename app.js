@@ -1,355 +1,394 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { 
+  RefreshCcw, BookOpen, Sparkles, Volume2, 
+  BrainCircuit, ArrowRight, BarChart3, Scale, 
+  Target, Flame, Headphones, Pause, Play, Ghost, Briefcase
+} from 'lucide-react';
 
-function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+// --- CONFIG ---
+const apiKey = ""; // 司令官のAPIキーがあればここに入れます（なくても基本機能は動きます）
+const MASTERY_THRESHOLD = 7;
+const REPEAT_GUARD_COUNT = 15;
+const AUTO_NEXT_DELAY = 10000; 
+const HANDS_FREE_WAIT = 4000; 
 
-const REVIEW_STEPS = [1, 3, 7, 14];
+// --- DATA FALLBACK (GitHubで questions.json が見つかるまでの仮データ) ---
+const FALLBACK_DATA = [
+  { 
+    "id": 1, 
+    "field": "システム待機中", 
+    "tag": "ロード", 
+    "q": "GitHub上の questions.json を読み込んでいます。もしこの画面が出続ける場合は、ファイルの場所や名前を確認してくだちゃい！", 
+    "a": "○", 
+    "choices": ["○", "×"], 
+    "fb_ok": "準備完了を待つちゃむ！", 
+    "fb_ng": "エラーかもちゃむ！" 
+  }
+];
 
-const CONFIG = {
-  readingSpeed: 6,
-  minDelay: 2000,
-  maxDelay: 12000,
-  correctBase: 1500,
-  wrongBase: 2500,
+// --- API HELPERS (TTS生成) ---
+const fetchTts = async (text) => {
+  try {
+    if (!apiKey) return null; // APIキーがない場合はスキップ
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: `朗読：${text}` }] }],
+        generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } } },
+        model: "gemini-2.5-flash-preview-tts"
+      })
+    });
+    const res = await response.json();
+    return res.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  } catch (e) { return null; }
 };
 
-function getReadingSpeed(streak) {
-  if (streak >= 10) return 10;
-  if (streak >= 5) return 8;
-  return CONFIG.readingSpeed;
-}
-
-function calcDelay(text, correct, streak) {
-  const base = correct ? CONFIG.correctBase : CONFIG.wrongBase;
-  const speed = getReadingSpeed(streak);
-  const readTime = (text.length / speed) * 1000;
-  return Math.min(Math.max(base, readTime), CONFIG.maxDelay);
-}
-
-function todayStr() { return new Date().toISOString().slice(0, 10); }
-function addDays(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
-function isDue(r) { return r?.nextReview && todayStr() >= r.nextReview; }
-function isOnCooldown(r) { return r?.cooldownUntil ? todayStr() < r.cooldownUntil : false; }
-
-function isMastered(r, total) {
-  const cc = total < 100 ? 5 : total < 300 ? 7 : 10;
-  if (!r || (r.correct_count || 0) < cc) return false;
-  if (!r.history || r.history.length < 3) return false;
-  return r.history.slice(-5).filter(Boolean).length >= 4;
-}
-
-function calcFieldAccSingle(field, results, QUESTIONS) {
-  const qs = QUESTIONS.filter(q => q.field === field);
-  let ok = 0, tot = 0;
-  qs.forEach(q => {
-    const r = results[q.id];
-    if (r?.history?.length) { const h = r.history.slice(-10); ok += h.filter(Boolean).length; tot += h.length; }
-  });
-  return tot > 0 ? ok / tot : null;
-}
-
-function pickQuestion(pool, results, sessionSeen, QUESTIONS) {
-  const scored = pool.map(q => {
-    const r = results[q.id] || {};
-    const wrong = r.wrong_count || 0;
-    const due = isDue(r) ? 1 : 0;
-    const recentMiss = (r.history || []).filter(x => !x).length;
-    const priority = Math.min(r.priority || 0.5, 1.0);
-    let score = wrong * 2 + due * 3 + recentMiss * 1.5 + priority * 1.5;
-    if (wrong >= 5) score += 10;
-    if (!r.history || r.history.length === 0) score += 3;
-    if (isOnCooldown(r)) score -= 5;
-    if (sessionSeen.has(q.id)) score -= 4;
-    if (isMastered(r, QUESTIONS.length)) score -= 10;
-    score = Math.min(score, 20);
-    return { q, score };
-  });
-  scored.sort((a, b) => b.score - a.score);
-  const topN = Math.max(1, Math.floor(scored.length * 0.3));
-  const top = scored.slice(0, topN);
-  const totalW = top.reduce((s, i) => s + Math.max(0.1, i.score + 15), 0);
-  let rand = Math.random() * totalW;
-  for (const item of top) { rand -= Math.max(0.1, item.score + 15); if (rand <= 0) return item.q; }
-  return top[0].q;
-}
-
-function getWeakTop5(results, QUESTIONS) {
-  const total = QUESTIONS.length;
-  return QUESTIONS
-    .filter(q => results[q.id]?.history?.length >= 2 && !isMastered(results[q.id], total))
-    .map(q => { const r = results[q.id]; const h = r.history.slice(-10); return { q, acc: h.filter(Boolean).length / h.length, count: h.length }; })
-    .sort((a, b) => a.acc - b.acc).slice(0, 5);
-}
-
-function calcPrediction(results, QUESTIONS) {
-  const total = QUESTIONS.length;
-  const mastered = QUESTIONS.filter(q => isMastered(results[q.id], total)).length;
-  const pct = Math.round(mastered / total * 100);
-  const label = pct >= 80 ? "合格圏内🎯" : pct >= 60 ? "もう少し💪" : pct >= 40 ? "基礎固め中📚" : "準備段階📖";
-  return { mastered, total, pct, label };
-}
-
-function save(key, val) { try { localStorage.setItem(`kv4-${key}`, JSON.stringify(val)); } catch {} }
-function load(key, fb) { try { const v = localStorage.getItem(`kv4-${key}`); return v ? JSON.parse(v) : fb; } catch { return fb; } }
-
-const C = {
-  bg: "#eaf9f7", bg2: "#ffffff", bg3: "#d4f2ee", border: "#a8ddd8",
-  gold: "#009e96", gold2: "#00b8ae", text: "#1a3835", sub: "#6a9e9a",
-  muted: "#3db8b3", green: "#1e9e6a", red: "#c04060", blue: "#4488aa",
+const pcmToWav = (pcmData, sampleRate) => {
+  const buffer = new ArrayBuffer(44 + pcmData.length * 2);
+  const view = new DataView(buffer);
+  const writeString = (offset, string) => { for (let i = 0; i < string.length; i++) view.setUint8(offset + i, string.charCodeAt(i)); };
+  writeString(0, 'RIFF'); view.setUint32(4, 36 + pcmData.length * 2, true); writeString(8, 'WAVE');
+  writeString(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  writeString(36, 'data'); view.setUint32(40, pcmData.length * 2, true);
+  for (let i = 0; i < pcmData.length; i++) view.setInt16(44 + i * 2, pcmData[i], true);
+  return new Blob([buffer], { type: 'audio/wav' });
 };
 
 export default function App() {
-  const [QUESTIONS, setQUESTIONS] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("quiz");
-  const [results, setResults] = useState({});
-  const [selectedField, setSelectedField] = useState("all");
-  const [phase, setPhase] = useState("question");
-  const [currentQ, setCurrentQ] = useState(null);
+  const [DATA, setDATA] = useState(null);
+  const [appState, setAppState] = useState('setup');
+  const [viewMode, setViewMode] = useState('dojo'); 
+  const [targetCount, setTargetCount] = useState(200);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [results, setResults] = useState(() => JSON.parse(localStorage.getItem('kimimaro-dojo-mastery') || '{}'));
+  const [sessionCount, setSessionCount] = useState(0);
+  const [history, setHistory] = useState([]);
   const [shuffledChoices, setShuffledChoices] = useState([]);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [isCorrect, setIsCorrect] = useState(null);
-  const [sessionSeen] = useState(new Set());
-  const [sessionScore, setSessionScore] = useState({ correct: 0, total: 0 });
-  const [streak, setStreak] = useState(0);
-  const [stopped, setStopped] = useState(false);
-  const [autoTimer, setAutoTimer] = useState(null);
+  const [aiContent, setAiContent] = useState({ type: '', text: '' });
+  const [loadingState, setLoadingState] = useState("");
+  const [isPaused, setIsPaused] = useState(false);
+  const autoTimerRef = useRef(null);
+  const audioRef = useRef(null);
 
-  // 初回：questions.jsonを読み込む
+  // JSONデータのロード機構 (ここが司令官のデータを読み込む核です！)
   useEffect(() => {
-    fetch('./questions.json')
-      .then(r => r.json())
+    fetch('questions.json')
+      .then(res => {
+        if (!res.ok) throw new Error("JSON not found");
+        return res.json();
+      })
       .then(data => {
-        setQUESTIONS(data);
-        setResults(load("results", {}));
-        setLoading(false);
+        // Claude先輩のデータなどで choices が無い場合に備えた安全装置
+        const safeData = data.map(q => ({
+          ...q,
+          choices: q.choices || ["○", "×"]
+        }));
+        setDATA(safeData);
       })
       .catch(err => {
-        console.error('questions.json読み込みエラー:', err);
-        setLoading(false);
+        console.warn("questions.jsonが見つかりません。プレビュー用データを使います。");
+        setDATA(FALLBACK_DATA);
       });
   }, []);
 
-  const FIELDS = QUESTIONS.length > 0 ? [...new Set(QUESTIONS.map(q => q.field))] : [];
+  const currentQ = useMemo(() => DATA && DATA.length > 0 ? (DATA[currentIndex] || DATA[0]) : null, [DATA, currentIndex]);
 
-  const saveResults = r => { setResults(r); save("results", r); };
-  const getPool = () => selectedField === "all" ? QUESTIONS : QUESTIONS.filter(q => q.field === selectedField);
+  const handleShuffleChoices = useCallback((idx) => {
+    if (!DATA) return;
+    const q = DATA[idx] || DATA[0];
+    setShuffledChoices([...(q.choices || ["○", "×"])].sort(() => Math.random() - 0.5));
+  }, [DATA]);
 
-  const nextQuestion = () => {
-    if (QUESTIONS.length === 0) return;
-    const pool = getPool();
-    const q = pickQuestion(pool, results, sessionSeen, QUESTIONS);
-    setCurrentQ(q);
-    setShuffledChoices(shuffle(q.choices));
-    setPhase("question");
-    setIsCorrect(null);
-    setStopped(false);
+  const handleTtsPlay = async (text, onEnd = null) => {
+    setLoadingState("tts");
+    const data = await fetchTts(text);
+    if (data) {
+      const wavBlob = pcmToWav(new Int16Array(new Uint8Array(atob(data).split("").map(c => c.charCodeAt(0))).buffer), 24000);
+      if (audioRef.current) audioRef.current.pause();
+      audioRef.current = new Audio(URL.createObjectURL(wavBlob));
+      audioRef.current.onended = () => { setLoadingState(""); if (onEnd) onEnd(); };
+      audioRef.current.play();
+    } else {
+      setLoadingState("");
+      if (onEnd) onEnd();
+    }
   };
 
-  useEffect(() => {
-    if (QUESTIONS.length > 0) nextQuestion();
-  }, [QUESTIONS, selectedField]);
+  const pickNext = useCallback(() => {
+    if (autoTimerRef.current) clearTimeout(autoTimerRef.current);
+    if (audioRef.current) audioRef.current.pause();
+    if (!DATA) return;
 
-  const handleAnswer = choice => {
-    if (!currentQ || phase === "feedback") return;
+    const available = DATA.filter(q => !history.includes(q.id));
+    const pool = available.length > 0 ? available : DATA;
+    const nextQ = pool[Math.floor(Math.random() * pool.length)];
+    const nextIdx = DATA.findIndex(q => q.id === nextQ.id);
+    
+    setCurrentIndex(nextIdx);
+    handleShuffleChoices(nextIdx);
+    setShowFeedback(false);
+    setIsCorrect(null);
+    setAiContent({ type: '', text: '' });
+    setHistory(prev => [nextQ.id, ...prev].slice(0, REPEAT_GUARD_COUNT));
+    
+    if (viewMode === 'ear') {
+       handleTtsPlay(`問題です。${nextQ.q}`, () => {
+         autoTimerRef.current = setTimeout(() => {
+           handleTtsPlay(`正解は、${nextQ.a}ちゃむ。解説、${nextQ.fb_ok}`, () => {
+             autoTimerRef.current = setTimeout(() => {
+               setSessionCount(prev => prev + 1);
+               pickNext();
+             }, 3000);
+           });
+         }, HANDS_FREE_WAIT);
+       });
+    }
+  }, [history, handleShuffleChoices, viewMode, DATA]);
+
+  const handleAnswer = (choice) => {
+    if (showFeedback || !currentQ) return;
     const correct = choice === currentQ.a;
     setIsCorrect(correct);
-    setPhase("feedback");
-    sessionSeen.add(currentQ.id);
-    setSessionScore(s => ({ correct: s.correct + (correct ? 1 : 0), total: s.total + 1 }));
-    setStreak(s => correct ? s + 1 : 0);
-    const r = results[currentQ.id] || { correct_count: 0, wrong_count: 0, history: [], priority: 0.5, step: 0 };
-    const newHistory = [...(r.history || []).slice(-2), correct];
-    let priority = Math.min(r.priority ?? 0.5, 1.0);
-    let step = r.step ?? 0;
-    if (correct) { priority = Math.max(0.1, priority - 0.1); step = Math.min(step + 1, REVIEW_STEPS.length - 1); }
-    else { priority = Math.min(1.0, priority + 0.2); step = 0; }
+    setShowFeedback(true);
+    setSessionCount(prev => prev + 1);
+
+    const r = results[currentQ.id] || { correct_count: 0 };
     const newResults = {
       ...results,
-      [currentQ.id]: {
-        ...r, correct_count: (r.correct_count || 0) + (correct ? 1 : 0),
-        wrong_count: (r.wrong_count || 0) + (correct ? 0 : 1),
-        history: newHistory, priority, step,
-        nextReview: correct ? addDays(REVIEW_STEPS[step]) : null,
-        cooldownUntil: correct ? null : addDays(1),
-      }
+      [currentQ.id]: { correct_count: r.correct_count + (correct ? 1 : 0) }
     };
-    saveResults(newResults);
-    if (autoTimer) clearTimeout(autoTimer);
-    const explanation = correct ? currentQ.fb_ok : currentQ.fb_ng;
-    const delay = calcDelay(explanation, correct, streak);
-    const timer = setTimeout(() => {
-      const pool = selectedField === "all" ? QUESTIONS : QUESTIONS.filter(q => q.field === selectedField);
-      const nextQ = pickQuestion(pool, newResults, sessionSeen, QUESTIONS);
-      setCurrentQ(nextQ);
-      setShuffledChoices(shuffle(nextQ.choices));
-      setPhase("question");
-      setIsCorrect(null);
-      setStopped(false);
-    }, delay);
-    setAutoTimer(timer);
+    setResults(newResults);
+    localStorage.setItem('kimimaro-dojo-mastery', JSON.stringify(newResults));
+    
+    if (viewMode === 'dojo' && !isPaused) autoTimerRef.current = setTimeout(pickNext, AUTO_NEXT_DELAY);
   };
 
-  const stopAuto = () => { if (autoTimer) clearTimeout(autoTimer); setStopped(true); };
-
-  if (loading) {
-    return <div style={{ padding: 40, textAlign: "center", color: C.gold, background: C.bg, minHeight: "100vh" }}>問題を読み込み中ちゃむ🌸</div>;
-  }
-
-  if (QUESTIONS.length === 0) {
-    return <div style={{ padding: 40, textAlign: "center", color: C.red, background: C.bg, minHeight: "100vh" }}>questions.jsonの読み込みに失敗したちゃむ🙏</div>;
-  }
-
-  const pred = calcPrediction(results, QUESTIONS);
-  const dueCount = QUESTIONS.filter(q => isDue(results[q.id])).length;
-  const weakList = getWeakTop5(results, QUESTIONS);
-
-  const s = {
-    app: { background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto" },
-    hdr: { background: "linear-gradient(135deg,#eaf9f7,#d4f2ee)", padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 50 },
-    content: { flex: 1, overflowY: "auto", padding: 14, paddingBottom: 76 },
-    card: { background: C.bg2, borderRadius: 12, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` },
-    tabBar: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", width: "100%", maxWidth: 480, background: C.bg2, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 100 },
-    tab: active => ({ flex: 1, padding: "9px 2px 7px", textAlign: "center", fontSize: 11, color: active ? C.gold : C.sub, fontWeight: active ? 700 : 400, cursor: "pointer", background: "none", border: "none", borderTop: `2px solid ${active ? C.gold : "transparent"}` }),
+  const handleAiCall = async (type) => {
+    if (!apiKey) {
+      setAiContent({ type: 'error', text: "APIキーが設定されていないためAIと通信できませんちゃむ。" });
+      return;
+    }
+    setIsPaused(true);
+    setLoadingState("ai");
+    setAiContent({ type, text: '' });
+    const prompts = {
+      else: "Javaエンジニアの視点でelse（例外・ひっかけ）をデバッグして。",
+      detail: "背景法理を初心者向けに詳しく解説してちゃむ。",
+      statute: "関連条文を抜き出して。全文表示してちゃむ。",
+      practical: "この法律知識が、実際の司法書士の実務（登記・供託・訴訟等）においてどのように機能するか、具体的活用シーンをシミュレーションしてちゃむ。"
+    };
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `問題: ${currentQ.q}\n解答: ${currentQ.a}` }] }],
+          systemInstruction: { parts: [{ text: prompts[type] }] }
+        })
+      });
+      const data = await response.json();
+      setAiContent({ type, text: data.candidates?.[0]?.content?.parts?.[0]?.text || "解析失敗ちゃむ。" });
+    } catch (e) { setAiContent({ type: 'error', text: "通信エラーだちゃむ。" }); }
+    finally { setLoadingState(""); }
   };
 
-  const renderQuiz = () => (
-    <div>
-      <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
-        {["all", ...FIELDS].map(f => (
-          <button key={f} onClick={() => setSelectedField(f)} style={{ whiteSpace: "nowrap", padding: "4px 10px", borderRadius: 20, border: `1px solid ${selectedField === f ? C.gold : C.border}`, background: selectedField === f ? `${C.gold}22` : "transparent", color: selectedField === f ? C.gold : C.sub, fontSize: 11, cursor: "pointer", fontWeight: selectedField === f ? 700 : 400 }}>
-            {f === "all" ? "全分野" : f}
-          </button>
-        ))}
-      </div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-        {[
-          { val: sessionScore.total > 0 ? Math.round(sessionScore.correct / sessionScore.total * 100) + "%" : "--", label: "今回正答率", color: C.gold },
-          { val: `🔥${streak}`, label: "連続正解", color: streak >= 5 ? "#ff9a3c" : C.text },
-          { val: pred.mastered, label: "習得済み", color: C.green },
-        ].map(({ val, label, color }) => (
-          <div key={label} style={{ ...s.card, flex: 1, padding: "8px 4px", marginBottom: 0, textAlign: "center" }}>
-            <div style={{ fontSize: 17, fontWeight: 700, color }}>{val}</div>
-            <div style={{ fontSize: 9, color: C.sub }}>{label}</div>
-          </div>
-        ))}
-      </div>
-      {currentQ && phase === "question" && (
-        <>
-          <div style={s.card}>
-            <div style={{ fontSize: 10, color: C.gold, fontWeight: 700, letterSpacing: 1, marginBottom: 6 }}>{currentQ.field} ▸ {currentQ.tag}</div>
-            <div style={{ fontSize: 15, lineHeight: 1.75, fontWeight: 400, color: "#a08060" }}>{currentQ.q}</div>
-          </div>
-          {currentQ.choices.length === 2 ? (
-            <div style={{ display: "flex", gap: 10, padding: "2px 0" }}>
-              {[["🌸","○","#d4721a"],["💩","×","#a08060"]].map(([emoji,val,col]) => (
-                <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: 18, borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: 32, fontWeight: 400, cursor: "pointer" }}>{emoji}</button>
-              ))}
-            </div>
-          ) : (
-            <div style={s.card}>
-              {shuffledChoices.map(c => (
-                <button key={c} onClick={() => handleAnswer(c)} style={{ width: "100%", padding: "10px 12px", marginBottom: 6, borderRadius: 9, border: `1px solid ${C.border}`, background: "transparent", color: C.muted, fontSize: 13, fontWeight: 500, cursor: "pointer", textAlign: "left" }}>{c}</button>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-      {currentQ && phase === "feedback" && (
-        <>
-          <div style={{ ...s.card, borderLeft: `4px solid ${isCorrect ? C.green : C.red}` }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: isCorrect ? C.green : C.red, marginRight: 8 }}>{isCorrect ? "○" : "×"} {isCorrect ? "正解" : "不正解"}</span>
-            <div style={{ fontSize: 15, lineHeight: 1.9, color: "#3db8b3", marginTop: 10, fontWeight: 500 }}>{isCorrect ? currentQ.fb_ok : currentQ.fb_ng}</div>
-          </div>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button onClick={stopAuto} style={{ flex: 1, padding: 12, borderRadius: 10, background: stopped ? "#fce8d8" : "transparent", border: `1px solid #d4888f`, color: "#d4888f", fontSize: 13, cursor: "pointer" }}>{stopped ? "⏸ 停止中" : "⏸ 停止"}</button>
-            <button onClick={nextQuestion} style={{ flex: 2, padding: 12, borderRadius: 10, background: `${C.gold}22`, border: `1px solid ${C.gold}`, color: C.gold, fontSize: 14, fontWeight: 700, cursor: "pointer" }}>次の問題へ →</button>
-          </div>
-        </>
-      )}
-    </div>
-  );
-
-  const renderStats = () => {
-    const fieldStats = FIELDS.map(f => {
-      const acc = calcFieldAccSingle(f, results, QUESTIONS);
-      const qs = QUESTIONS.filter(q => q.field === f);
-      const mastered = qs.filter(q => isMastered(results[q.id], QUESTIONS.length)).length;
-      return { f, acc, mastered, total: qs.length };
-    });
+  if (!DATA) {
     return (
-      <div>
-        <div style={s.card}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 10 }}>総合進捗</div>
-          <div style={{ textAlign: "center", padding: "8px 0 12px" }}>
-            <div style={{ fontSize: 44, fontWeight: 700, color: C.gold, lineHeight: 1 }}>{pred.pct}<span style={{ fontSize: 20 }}>%</span></div>
-            <div style={{ fontSize: 13, color: C.sub, marginTop: 4 }}>{pred.label} — 習得 {pred.mastered}/{pred.total}</div>
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white space-y-4">
+        <RefreshCcw className="w-10 h-10 animate-spin text-emerald-500" />
+        <p className="text-xs font-black tracking-[0.2em] text-emerald-400">LOADING ARSENAL...</p>
+      </div>
+    );
+  }
+
+  if (appState === 'setup') {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6 text-white font-sans">
+        <div className="max-w-md w-full space-y-12 text-center animate-in zoom-in-95">
+          <div className="space-y-4">
+            <div className="bg-emerald-500 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-sm rotate-3"><Target className="w-8 h-8 text-white" /></div>
+            <h1 className="text-3xl font-black tracking-tight">きみまろ道場</h1>
+            <Badge variant="secondary" className="bg-white/10 text-emerald-400 border-none px-3 py-1 uppercase tracking-widest text-[10px]">v20.5 Main Edition</Badge>
+            <p className="text-xs text-slate-400 font-bold">装填完了：{DATA.length}問</p>
           </div>
-        </div>
-        <div style={s.card}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 10 }}>分野別正解率</div>
-          {fieldStats.map(({ f, acc, mastered, total }) => (
-            <div key={f} style={{ marginBottom: 8 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
-                <span style={{ color: C.muted }}>{f}</span>
-                <span style={{ color: C.sub }}>{mastered}/{total} | {acc !== null ? Math.round(acc * 100) : "--"}%</span>
-              </div>
-            </div>
-          ))}
+          
+          <div className="grid grid-cols-2 gap-3 px-4">
+            {[20, 50, 100, 200].map(n => (
+              <Button key={n} onClick={() => { setTargetCount(n); setSessionCount(0); setAppState('dojo'); setViewMode('dojo'); handleShuffleChoices(currentIndex); }}
+                className="h-16 rounded-xl bg-white/5 hover:bg-emerald-600 border border-white/10 text-lg font-black transition-all active:scale-95"
+              >
+                {n}問 撃破
+              </Button>
+            ))}
+          </div>
+
+          <Button 
+            onClick={() => { setViewMode('ear'); setAppState('dojo'); setTargetCount(999); pickNext(); }}
+            className="w-full h-16 rounded-2xl bg-orange-100 hover:bg-orange-200 text-orange-700 text-lg font-bold flex items-center justify-center gap-3 transition-all active:scale-95 border-none"
+          >
+            <Headphones className="w-6 h-6" /> 耳勉（自動）を開始
+          </Button>
         </div>
       </div>
     );
-  };
-
-  const renderWeak = () => (
-    <div style={s.card}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 10 }}>🔴 弱点問題 TOP5</div>
-      {weakList.length === 0 ? (
-        <div style={{ textAlign: "center", color: C.sub, padding: "20px 0" }}>問題を解いて弱点を見つけてちゃむ🌸</div>
-      ) : weakList.map(({ q, acc, count }) => (
-        <div key={q.id} style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: 10, marginBottom: 10 }}>
-          <div style={{ fontSize: 10, color: C.gold, marginBottom: 3 }}>{q.field}</div>
-          <div style={{ fontSize: 12, color: "#a08060", marginBottom: 4 }}>{q.q.length > 50 ? q.q.slice(0, 50) + "…" : q.q}</div>
-          <span style={{ fontSize: 10, color: C.sub }}>{Math.round(acc * 100)}% ({count}回)</span>
-        </div>
-      ))}
-    </div>
-  );
-
-  const renderReview = () => {
-    const dueList = QUESTIONS.filter(q => isDue(results[q.id]));
-    return (
-      <div style={s.card}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.gold, marginBottom: 10 }}>🔔 本日の復習</div>
-        {dueList.length === 0 ? (
-          <div style={{ textAlign: "center", color: C.green, padding: "16px 0" }}>今日の復習は完了ちゃむ🌸</div>
-        ) : (
-          <div style={{ fontSize: 13, color: C.gold }}>{dueList.length}問 復習待ちちゃむ</div>
-        )}
-      </div>
-    );
-  };
+  }
 
   return (
-    <div style={s.app}>
-      <div style={s.hdr}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.gold, letterSpacing: 2 }}>⚖ きみまろ道場</div>
-            <div style={{ fontSize: 10, color: C.sub }}>司法書士 民法 {QUESTIONS.length}問 | {pred.mastered}問習得</div>
-          </div>
-          {dueCount > 0 && <div style={{ background: `${C.red}33`, color: C.red, border: `1px solid ${C.red}`, borderRadius: 20, padding: "2px 8px", fontSize: 11, fontWeight: 700 }}>🔔{dueCount}</div>}
-        </div>
-      </div>
-      <div style={s.content}>
-        {tab === "quiz" && renderQuiz()}
-        {tab === "stats" && renderStats()}
-        {tab === "weak" && renderWeak()}
-        {tab === "review" && renderReview()}
-      </div>
-      <div style={s.tabBar}>
-        {[["quiz","📝 問題"],["stats","🌸 成績"],["weak","🔴 弱点"],["review","🔔 復習"]].map(([id,label]) => (
-          <button key={id} style={s.tab(tab === id)} onClick={() => setTab(id)}>{label}</button>
+    <div className="h-screen bg-[#f8faf8] flex flex-col font-sans overflow-hidden select-none text-slate-800">
+      
+      <nav className="bg-white border-b border-emerald-100 flex justify-around items-center shrink-0 h-14 z-[60] shadow-sm px-2">
+        {[
+          { id: 'dojo', icon: BookOpen, label: '道場' },
+          { id: 'stats', icon: BarChart3, label: '分析' },
+          { id: 'setup', icon: RefreshCcw, label: '再選' }
+        ].map(t => (
+          <button key={t.id} onClick={() => t.id === 'setup' ? setAppState('setup') : setViewMode(t.id)} 
+            className={`flex-1 flex flex-col items-center justify-center h-full transition-all border-b-4 ${viewMode === t.id && appState !== 'setup' ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50' : 'border-transparent text-slate-300'}`}>
+            <t.icon className="w-5 h-5 mb-0.5" />
+            <span className="text-[8px] font-black uppercase tracking-tighter">{t.label}</span>
+          </button>
         ))}
-      </div>
-    </div>
-  );
-}
+      </nav>
+
+      <main className="flex-1 flex flex-col min-h-0 px-4 pt-4 overflow-hidden">
+        <div className="max-w-md mx-auto w-full flex flex-col h-full gap-4">
+          
+          {viewMode === 'dojo' && currentQ && (
+            <>
+              <Card className="border-emerald-50 shadow-sm rounded-[2rem] bg-[#f2fcf5] shrink-0 overflow-hidden relative border">
+                <div className="bg-emerald-400/20 h-1 transition-all duration-700" style={{ width: `${(sessionCount/targetCount)*100}%` }} />
+                <CardContent className="p-6 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <Badge variant="outline" className="text-[10px] border-emerald-200 text-emerald-600 bg-white/80 px-2.5 font-normal tracking-tight">
+                      {currentQ.field || '分野なし'} • {sessionCount}/{targetCount}
+                    </Badge>
+                    
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => handleTtsPlay(currentQ.q)} 
+                        className={`p-2 rounded-full transition-all ${loadingState === "tts" ? "bg-emerald-100 text-emerald-600 animate-pulse" : "bg-white text-slate-300 hover:text-emerald-500 shadow-sm"}`}>
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+                      
+                      <div className="flex gap-1.5 ml-1">
+                        {[...Array(MASTERY_THRESHOLD)].map((_, i) => (
+                          <div key={i} className={`w-2.5 h-2.5 rounded-full ${i < (results[currentQ.id]?.correct_count || 0) ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="min-h-[110px] flex items-center justify-center px-4 py-2">
+                    <p className="text-base leading-loose text-[#4a3c32] font-normal text-center">
+                      {currentQ.q}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* スマート解答ボタン（2択は丸ボタン、それ以外は四角ボタン） */}
+              {!showFeedback ? (
+                currentQ.choices && currentQ.choices.length === 2 && currentQ.choices.includes("○") ? (
+                  <div className="flex justify-center gap-12 py-3 shrink-0">
+                    {shuffledChoices.map(choice => (
+                      <button key={choice} onClick={() => handleAnswer(choice)}
+                        className="w-24 h-24 text-6xl flex items-center justify-center rounded-full shadow-sm border border-emerald-50 bg-white active:scale-95 transition-all hover:bg-emerald-50"
+                      >
+                        {choice === "○" ? "🌸" : "💩"}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2 py-1 shrink-0 px-4 overflow-y-auto max-h-[40vh]">
+                    {shuffledChoices.map(choice => (
+                      <button key={choice} onClick={() => handleAnswer(choice)}
+                        className="w-full min-h-[3.5rem] px-4 py-2 text-[15px] font-bold flex items-center justify-center rounded-xl shadow-sm border border-emerald-50 bg-white active:scale-95 transition-all text-[#4a3c32] hover:bg-emerald-50"
+                      >
+                        {choice}
+                      </button>
+                    ))}
+                  </div>
+                )
+              ) : (
+                <div className="flex-1 flex flex-col min-h-0 gap-3 overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <div className={`p-4 rounded-[2rem] border flex flex-col gap-4 shadow-sm shrink-0 ${isCorrect ? 'bg-emerald-50 border-emerald-100' : 'bg-orange-50 border-orange-100'}`}>
+                    <div className="flex items-center gap-4 px-2">
+                       <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-black text-sm ${isCorrect ? 'bg-emerald-500' : 'bg-[#ffb380]'}`}>
+                         {isCorrect ? '○' : '×'}
+                       </div>
+                       <p className={`text-[13px] font-bold leading-relaxed flex-1 ${isCorrect ? 'text-emerald-800' : 'text-orange-900'}`}>
+                         {isCorrect ? currentQ.fb_ok : currentQ.fb_ng}
+                       </p>
+                    </div>
+                    
+                    <div className="flex items-center gap-3">
+                      <Button onClick={pickNext} className="flex-1 h-12 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black rounded-2xl relative overflow-hidden active:scale-95 shadow-none border-none">
+                        次へ進む <ArrowRight className="w-4 h-4 ml-1.5" />
+                        {!isPaused && (
+                          <div className="absolute bottom-0 left-0 h-1 bg-white/30 animate-timer-bar origin-left" style={{ animationDuration: `${AUTO_NEXT_DELAY}ms` }} />
+                        )}
+                      </Button>
+                      
+                      <Button onClick={() => setIsPaused(!isPaused)} variant="outline" 
+                        className={`h-12 w-32 rounded-2xl border transition-all shadow-none ${isPaused ? 'bg-orange-100 border-[#ffb380] text-orange-600' : 'bg-white border-slate-200 text-slate-400'}`}>
+                        {isPaused ? <Play className="w-5 h-5 fill-current" /> : <Pause className="w-5 h-5 fill-current" />}
+                        <span className="ml-1.5 text-[10px] font-black uppercase">{isPaused ? '再開' : '停止'}</span>
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-4 gap-2 px-1">
+                      {[
+                        { id: 'else', label: 'Else解析', color: 'bg-violet-100 text-violet-700', icon: Ghost },
+                        { id: 'detail', label: '詳細解説', color: 'bg-blue-100 text-blue-700', icon: Sparkles },
+                        { id: 'statute', label: '条文確認', color: 'bg-slate-100 text-slate-700', icon: Scale },
+                        { id: 'practical', label: '実務ハック', color: 'bg-emerald-100 text-emerald-700', icon: Briefcase }
+                      ].map(b => (
+                        <Button key={b.id} size="sm" onClick={() => handleAiCall(b.id)} 
+                          className={`${b.color} border-none text-[9px] font-black h-9 rounded-xl shadow-none active:translate-y-0.5 transition-all flex flex-col items-center justify-center gap-0.5`}>
+                          <b.icon className="w-3 h-3" />
+                          <span>{b.label}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-h-0 bg-slate-900 rounded-t-[2.5rem] relative overflow-hidden flex flex-col">
+                    <div className="p-5 py-3 border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Sparkles className={`w-4 h-4 text-violet-400 ${loadingState === "ai" ? 'animate-spin' : ''}`} />
+                        <span className="text-[10px] font-black text-white/30 tracking-[0.2em] uppercase">Log Output</span>
+                      </div>
+                      {loadingState === "ai" && <Badge className="bg-violet-600 text-[8px] animate-pulse">Analyzing...</Badge>}
+                    </div>
+                    
+                    <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                       {aiContent.text ? (
+                         <div className="animate-in fade-in duration-700 pb-12">
+                           <p className="text-[14px] leading-loose whitespace-pre-wrap font-sans text-slate-200">
+                             {aiContent.text}
+                           </p>
+                         </div>
+                       ) : (
+                         <div className="h-full flex flex-col items-center justify-center opacity-10">
+                            <BrainCircuit className="w-14 h-14 text-white mb-4" />
+                            <p className="text-[11px] text-white tracking-widest text-center uppercase font-black px-10">Select an analysis thread to deploy logic logs</p>
+                         </div>
+                       )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {viewMode === 'ear' && (
+             <div className="flex-1 flex flex-col items-center justify-center space-y-12 animate-in zoom-in-95 duration-500">
+               <div className="relative">
+                 <div className="bg-[#ffb380]/10 w-48 h-48 rounded-full absolute -inset-6 animate-pulse" />
+                 <div className="bg-[#ffb380] w-36
