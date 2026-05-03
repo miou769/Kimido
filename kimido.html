@@ -1,0 +1,76 @@
+ <!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>きみまろ道場 v31.0</title>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: #eaf9f7; font-family: 'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif; }
+  select, button, input { -webkit-appearance: none; appearance: none; font-family: inherit; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-thumb { background: #a8ddd8; border-radius: 2px; }
+  #loading {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    color: #009e96; font-size: 14px; text-align: center;
+  }
+  #loading .spin {
+    display: inline-block; width: 32px; height: 32px;
+    border: 3px solid #d4f2ee; border-top-color: #009e96;
+    border-radius: 50%; animation: sp 0.8s linear infinite;
+    margin-bottom: 12px;
+  }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="loading">
+  <div class="spin"></div>
+  <div>読み込み中ちゃむ🌸</div>
+</div>
+<script>
+// kimido.jsx を取得して実行するちゃむ
+fetch('./kimido.jsx?v=' + Date.now())
+  .then(function(r) {
+    if (!r.ok) throw new Error('kimido.jsx が見つからないちゃむ (HTTP ' + r.status + ')');
+    return r.text();
+  })
+  .then(function(code) {
+    // ① "import { ... } from 'react';" を削除
+    code = code.replace(/import\s*\{[^}]+\}\s*from\s*["']react["'];?\s*/g, '');
+    // ② "export default function App" → "function App"
+    code = code.replace(/export\s+default\s+function\s+App/, 'function App');
+
+    // ③ React フックを window から取り出す + 末尾に描画コード追加
+    var wrappedCode =
+      'const { useState, useEffect, useRef } = React;\n' +
+      code +
+      '\nReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));';
+
+    // ④ Babel で JSX を変換
+    var transformed = Babel.transform(wrappedCode, { presets: ['react'] }).code;
+
+    // ⑤ ローディング消して実行
+    var loading = document.getElementById('loading');
+    if (loading) loading.remove();
+
+    var fn = new Function(transformed);
+    fn();
+  })
+  .catch(function(err) {
+    var el = document.getElementById('loading');
+    if (el) {
+      el.innerHTML = '<div style="color:#d4721a;padding:20px;max-width:300px;">⚠ エラーちゃむ<br><br>' +
+        err.message + '<br><br>' +
+        '<small>kimido.jsx が同じフォルダにあるか確認してちゃむ</small></div>';
+    }
+    console.error(err);
+  });
+</script>
+</body>
+</html>
