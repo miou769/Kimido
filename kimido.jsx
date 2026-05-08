@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 const CONFIG = {
   readingSpeed: 6,
-  minDelay: 2000,
+  minDelay: 2000,button key
   maxDelay: 12000,
   correctBase: 1500,
   wrongBase: 2500,
@@ -974,7 +974,7 @@ useEffect(() => {
   const s = {app: { background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", fontSize: 16 },
     hdr: { background: C.bg2, padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 50 },
     content: { flex: 1, overflowY: "auto", padding: 14, paddingBottom: 96 },
-    card: { background: C.bg2, borderRadius: 12, padding: 14, marginBottom: 10, border: `1px solid ${C.border}` },
+    card: { background: C.bg2, borderRadius: 12, padding: "10px 12px", marginBottom: 8, border: `1px solid ${C.border}` },C.border}` },
     tabBar: { position: "fixed", bottom: 0, left: 0, right: 0, width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 100, paddingBottom: "env(safe-area-inset-bottom, 8px)" },
     tab: active => ({ flex: 1, padding: "9px 2px 7px", textAlign: "center", fontSize: 11, color: active ? C.gold : C.sub, fontWeight: active ? 700 : 400, cursor: "pointer", background: "none", border: "none", borderTop: `2px solid ${active ? C.gold : "transparent"}` }),
     secTitle: { fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" },
@@ -987,7 +987,7 @@ useEffect(() => {
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
         {["all", ...FIELDS].map(f => (
-          <button key={f} onClick={() => setSelectedField(f)} style={{ whiteSpace: "nowrap", padding: "4px 10px", borderRadius: 20, border: `1px solid ${selectedField === f ? C.gold : C.border}`, background: selectedField === f ? `${C.gold}22` : "transparent", color: selectedField === f ? C.gold : C.sub, fontSize: 11, cursor: "pointer", fontWeight: selectedField === f ? 700 : 400 }}>
+          <={f} onClick={() => setSelectedField(f)} style={{ whiteSpace: "nowrap", padding: "4px 10px", borderRadius: 20, border: `1px solid ${selectedField === f ? C.gold : C.border}`, background: selectedField === f ? `${C.gold}22` : "transparent", color: selectedField === f ? C.gold : C.sub, fontSize: 11, cursor: "pointer", fontWeight: selectedField === f ? 700 : 400 }}>
             {f === "all" ? "全分野" : f}
           </button>
         ))}
@@ -1013,7 +1013,7 @@ useEffect(() => {
           {currentQ.choices.length === 2 ? (
             <div style={{ display: "flex", gap: 10, padding: "2px 0" }}>
               {[["🌸","○","#d4721a"],["💩","×","#a08060"]].map(([emoji,val,col]) => (
-                <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: 18, borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: 32, fontWeight: 400, cursor: "pointer" }}>{emoji}</button>
+                <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: 18, borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: 28, fontWeight: 400, cursor: "pointer" }}>{emoji}</button>
               ))}
             </div>
           ) : (
