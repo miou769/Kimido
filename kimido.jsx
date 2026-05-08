@@ -986,11 +986,11 @@ useEffect(() => {
   const renderQuiz = () => (
     <div>
       <div style={{ display: "flex", gap: 6, marginBottom: 12, overflowX: "auto", paddingBottom: 2 }}>
-        {["all", ...FIELDS].map(f => (
-          <={f} onClick={() => setSelectedField(f)} style={{ whiteSpace: "nowrap", padding: "4px 10px", borderRadius: 20, border: `1px solid ${selectedField === f ? C.gold : C.border}`, background: selectedField === f ? `${C.gold}22` : "transparent", color: selectedField === f ? C.gold : C.sub, fontSize: 11, cursor: "pointer", fontWeight: selectedField === f ? 700 : 400 }}>
-            {f === "all" ? "全分野" : f}
-          </button>
-        ))}
+       {["all", ...FIELDS].map(f => (
+  <button key={f} onClick={() => setSelectedField(f)} style={{ whiteSpace: "nowrap", padding: "4px 10px", borderRadius: 20, border: `1px solid ${selectedField === f ? C.gold : C.border}`, background: selectedField === f ? `${C.gold}22` : "transparent", color: selectedField === f ? C.gold : C.sub, fontSize: 11, cursor: "pointer", fontWeight: selectedField === f ? 700 : 400 }}>
+    {f === "all" ? "全分野" : f}
+  </button>
+))}
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         {[
