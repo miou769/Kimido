@@ -899,16 +899,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadFromStorage("results", {}).then(r => {
-      setResults(r);
-      setStorageLoaded(true);
-    });
-  }, []);
+  loadFromStorage("results", {}).then(r => {
+    setResults(r);
+    setStorageLoaded(true);
+  });
+}, []);
 
-  useEffect(() => {
-    if (storageLoaded) nextQuestion();
-  }, [selectedField, storageLoaded]);
-
+useEffect(() => {
+  if (!storageLoaded) return;
+  const pool = selectedField === "all" ? QUESTIONS : QUESTIONS.filter(q => q.field === selectedField);
+  const q = pickQuestion(pool, results, sessionSeen);
+  if (!q) return;
+  setCurrentQ(q);
+  setShuffledChoices(shuffle(q.choices));
+  setPhase("question");
+  setIsCorrect(null);
+}, [selectedField, storageLoaded, results]);
   const handleAnswer = choice => {
     if (!currentQ || phase === "feedback") return;
     const correct = choice === currentQ.a;
