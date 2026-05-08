@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 const CONFIG = {
   readingSpeed: 6,
-  minDelay: 2000,button key
+  minDelay: 2000,
   maxDelay: 12000,
   correctBase: 1500,
   wrongBase: 2500,
