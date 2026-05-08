@@ -973,9 +973,9 @@ useEffect(() => {
 
   const s = {app: { background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", fontSize: 16 },
     hdr: { background: C.bg2, padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 50 },
-    content: { flex: 1, overflowY: "auto", padding: 14, paddingBottom: 96 },
+   content: { flex: 1, overflowY: "auto", padding: 14 },
    card: { background: C.bg2, borderRadius: 12, padding: "10px 12px", marginBottom: 8, border: `1px solid ${C.border}` },
-    tabBar: { position: "fixed", bottom: 0, left: 0, right: 0, width: "100%", maxWidth: 480, margin: "0 auto", background: C.bg2, borderTop: `1px solid ${C.border}`, display: "flex", zIndex: 100, paddingBottom: "env(safe-area-inset-bottom, 8px)" },
+   tabBar: { position: "sticky", top: 0, width: "100%", background: C.bg2, borderBottom: `1px solid ${C.border}`, display: "flex", zIndex: 100 },
     tab: active => ({ flex: 1, padding: "9px 2px 7px", textAlign: "center", fontSize: 11, color: active ? C.gold : C.sub, fontWeight: active ? 700 : 400, cursor: "pointer", background: "none", border: "none", borderTop: `2px solid ${active ? C.gold : "transparent"}` }),
     secTitle: { fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" },
     statBar: { height: 6, borderRadius: 3, background: C.border, overflow: "hidden", marginBottom: 3 },
