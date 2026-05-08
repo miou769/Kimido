@@ -1013,7 +1013,7 @@ useEffect(() => {
           {currentQ.choices.length === 2 ? (
             <div style={{ display: "flex", gap: 10, padding: "2px 0" }}>
               {[["🌸","○","#d4721a"],["💩","×","#a08060"]].map(([emoji,val,col]) => (
-                <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: 18, borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: 28, fontWeight: 400, cursor: "pointer" }}>{emoji}</button>
+            <button key={val} onClick={() => handleAnswer(val)} style={{ flex: 1, padding: "12px 8px", borderRadius: 12, border: `1px solid ${col}`, background: "transparent", color: col, fontSize: 28, fontWeight: 400, cursor: "pointer" }}>{emoji}</button>
               ))}
             </div>
           ) : (
