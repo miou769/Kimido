@@ -978,7 +978,7 @@ useEffect(() => {
    tabBar: { position: "sticky", top: 0, width: "100%", background: C.bg2, borderBottom: `1px solid ${C.border}`, display: "flex", zIndex: 100 },
     tab: active => ({ flex: 1, padding: "9px 2px 7px", textAlign: "center", fontSize: 11, color: active ? C.gold : C.sub, fontWeight: active ? 700 : 400, cursor: "pointer", background: "none", border: "none", borderTop: `2px solid ${active ? C.gold : "transparent"}` }),
     secTitle: { fontSize: 11, fontWeight: 700, color: C.gold, letterSpacing: 1, marginBottom: 10, textTransform: "uppercase" },
-    statBar: { height: 6, borderRadius: 3, background: C.border, overflow: "hidden", marginBottom: 3 },
+    statBar: { height: 6, borderRadius: 3, background: C.border, overflow: "visible", marginBottom: 3 },
     fill: (pct, col) => ({ height: "100%", width: `${Math.min(100, pct)}%`, background: col, borderRadius: 3, transition: "width 0.6s" }),
     nextBtn: { width: "100%", padding: 13, borderRadius: 10, background: `linear-gradient(135deg,${C.gold},${C.gold2})`, border: "none", color: C.bg, fontSize: 15, fontWeight: 700, cursor: "pointer", marginTop: 8 },
   };
