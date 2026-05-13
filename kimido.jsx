@@ -1191,7 +1191,11 @@ useEffect(() => {
   };
 
   return (
-    <div style={s.app}>
+    <div style={s.app}><div style={s.tabBar}>
+        {[["quiz","📝 問題"],["stats","📊 成績"],["weak","🔴 弱点"],["review","🔔 復習"]].map(([id,label]) => (
+          <button key={id} style={s.tab(tab === id)} onClick={() => setTab(id)}>{label}</button>
+        ))}
+      </div>
       <div style={s.hdr}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
           <div>
@@ -1238,11 +1242,7 @@ useEffect(() => {
         {tab === "weak" && renderWeak()}
         {tab === "review" && renderReview()}
       </div>
-      <div style={s.tabBar}>
-        {[["quiz","📝 問題"],["stats","📊 成績"],["weak","🔴 弱点"],["review","🔔 復習"]].map(([id,label]) => (
-          <button key={id} style={s.tab(tab === id)} onClick={() => setTab(id)}>{label}</button>
-        ))}
-      </div>
+      
     </div>
   );
 }
