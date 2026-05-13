@@ -973,7 +973,7 @@ useEffect(() => {
 
   const s = {app: { background: C.bg, minHeight: "100vh", color: C.text, fontFamily: "'Hiragino Kaku Gothic Pro','Noto Sans JP',sans-serif", display: "flex", flexDirection: "column", maxWidth: 480, margin: "0 auto", fontSize: 16 },
     hdr: { background: C.bg2, padding: "10px 16px 8px", borderBottom: `1px solid ${C.border}`, position: "sticky", top: 0, zIndex: 50 },
-   content: { flex: 1, overflowY: "auto", padding: 14 },
+   content: { flex: 1,  padding: 14 },
    card: { background: C.bg2, borderRadius: 12, padding: "10px 12px", marginBottom: 8, border: `1px solid ${C.border}` },
    tabBar: { position: "sticky", top: 0, width: "100%", background: C.bg2, borderBottom: `1px solid ${C.border}`, display: "flex", zIndex: 100 },
     tab: active => ({ flex: 1, padding: "9px 2px 7px", textAlign: "center", fontSize: 11, color: active ? C.gold : C.sub, fontWeight: active ? 700 : 400, cursor: "pointer", background: "none", border: "none", borderTop: `2px solid ${active ? C.gold : "transparent"}` }),
